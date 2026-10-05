@@ -7,6 +7,8 @@ export const uint64 = z.string().regex(uint64Pattern)
 const hash = z.string().regex(/^0x[0-9a-fA-F]{64}$/).transform(value => value.toLowerCase());
 const label = z.string().max(255).nullable();
 
+export const publicTrackingSchema = z.strictObject({ trackingId: hash, tenantId: hash, entityId: hash });
+
 export const publicEntitySchema = z.strictObject({
   tenantId: hash, entityId: hash, entityType: hash, entityTypeLabel: label,
   metadataHash: hash, currentState: hash, currentStateLabel: label,

@@ -5,6 +5,7 @@ import { useTrace } from "./use-trace";
 import { displayDate, HashValue, Heading, Problem, shortId, useRetryWait } from "./display";
 import { PublicApiError } from "../lib/public-client";
 import { normalizeId } from "../lib/urls";
+import type { TraceTarget } from "../lib/urls";
 import type { PublicEvent } from "../lib/public-contract";
 
 function TimelineEvent({ event }: { event: PublicEvent }) {
@@ -32,8 +33,8 @@ function TimelineEvent({ event }: { event: PublicEvent }) {
   </li>;
 }
 
-function ValidTrace({ tenantId, entityId }: { tenantId: string; entityId: string }) {
-  const { state, refresh, loadMore, paging, pageError } = useTrace(tenantId, entityId);
+function ValidTrace({ target }: { target: TraceTarget }) {
+  const { state, refresh, loadMore, paging, pageError } = useTrace(target);
   const wait = useRetryWait(pageError?.retryAt ?? 0);
   if (state.kind === "failed") return <Problem error={state.error} retry={refresh} />;
   if (state.kind === "loading") return <section className="loading-card" aria-busy="true" role="status">
@@ -74,6 +75,7 @@ function ValidTrace({ tenantId, entityId }: { tenantId: string; entityId: string
       <aside className="record-sidebar">
         <section className="panel identity-panel" aria-labelledby="identity-heading">
           <span className="eyebrow">RECORD IDENTITY</span><h2 id="identity-heading">The details that connect it</h2>
+          {"trackingId" in target && <HashValue label="Tracking ID" value={target.trackingId} />}
           <HashValue label="Tenant ID" value={entity.tenantId} /><HashValue label="Entity ID" value={entity.entityId} />
           <HashValue label="Custodian ID" value={entity.currentCustodian} />
           <details className="identity-extra"><summary>More record details</summary>
@@ -92,9 +94,14 @@ function ValidTrace({ tenantId, entityId }: { tenantId: string; entityId: string
   </div>;
 }
 
-export function TraceViewer({ tenantId, entityId }: { tenantId: string; entityId: string }) {
-  const tenant = normalizeId(tenantId);
-  const entity = normalizeId(entityId);
+export function TraceViewer(target: TraceTarget) {
+  if ("trackingId" in target) {
+    const trackingId = normalizeId(target.trackingId);
+    if (!trackingId) return <Problem error={new PublicApiError("invalid")} retry={() => {}} />;
+    return <ValidTrace key={`tracking:${trackingId}`} target={{ trackingId }} />;
+  }
+  const tenant = normalizeId(target.tenantId);
+  const entity = normalizeId(target.entityId);
   if (!tenant || !entity) return <Problem error={new PublicApiError("invalid")} retry={() => {}} />;
-  return <ValidTrace key={`${tenant}:${entity}`} tenantId={tenant} entityId={entity} />;
+  return <ValidTrace key={`${tenant}:${entity}`} target={{ tenantId: tenant, entityId: entity }} />;
 }

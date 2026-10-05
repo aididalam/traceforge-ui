@@ -10,10 +10,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // Public data is loaded afresh in the browser, never in an RSC payload.
   async headers() {
-    return [{
-      source: "/trace/:path*",
+    return ["/trace/:path*", "/track/:path*"].map(source => ({
+      source,
       headers: [{ key: "Cache-Control", value: "private, no-store, max-age=0" }],
-    }];
+    }));
   },
 };
 

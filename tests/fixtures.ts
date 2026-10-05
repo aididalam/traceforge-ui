@@ -4,6 +4,12 @@ import type { PublicEntity, PublicEvent } from "../src/lib/public-contract";
 export const tenantId = "0x" + "ab".repeat(32);
 export const entityId = "0x" + "cd".repeat(32);
 export const unknownId = "0x" + "ef".repeat(32);
+export const trackingId = "0x" + "34".repeat(32);
+export const otherTrackingId = "0x" + "56".repeat(32);
+export const otherTenantId = "0x" + "12".repeat(32);
+export const tracking = { trackingId, tenantId, entityId };
+export const trackingUrl = `/track/${trackingId}`;
+export const trackingApiPath = `/public/v1/tracking/${trackingId}`;
 export const hash = "0x" + "44".repeat(32);
 export const entity: PublicEntity = {
   tenantId, entityId, entityType: hash, entityTypeLabel: "Batch",

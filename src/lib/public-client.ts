@@ -1,4 +1,4 @@
-import { publicEntitySchema, uint64, validateHistory } from "./public-contract";
+import { publicEntitySchema, publicTrackingSchema, uint64, validateHistory } from "./public-contract";
 import { normalizeId, publicOrigin } from "./urls";
 
 export type FailureKind = "missing" | "rateLimited" | "invalid" | "unavailable";
@@ -20,7 +20,7 @@ export function retryTime(value: string | null, now = Date.now()): number {
 
 export function createPublicClient(base = "", fetcher: typeof fetch = fetch, timeoutMs = 10000) {
   // An external origin requires a separately configured CORS policy. Default
-  // requests use this Next app's two fixed, token-free GET handlers.
+  // requests use this Next app's fixed, token-free public GET handlers.
   const origin = base ? publicOrigin(base, process.env.NODE_ENV !== "production") : "";
   function path(tenant: string, entity: string) {
     const tenantId = normalizeId(tenant);
@@ -56,6 +56,16 @@ export function createPublicClient(base = "", fetcher: typeof fetch = fetch, tim
   }
 
   return {
+    async tracking(value: string, signal?: AbortSignal) {
+      const trackingId = normalizeId(value);
+      if (!trackingId) throw new PublicApiError("invalid");
+      const data = await read(`${origin}/public/v1/tracking/${trackingId}`, signal);
+      try {
+        const result = publicTrackingSchema.parse(data);
+        if (result.trackingId !== trackingId) throw new Error("Mismatched tracking ID.");
+        return result;
+      } catch { throw new PublicApiError("unavailable"); }
+    },
     async entity(tenant: string, entity: string, signal?: AbortSignal) {
       const ids = path(tenant, entity);
       const data = await read(ids.url, signal);

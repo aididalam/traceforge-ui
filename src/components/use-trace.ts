@@ -3,13 +3,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPublicClient, PublicApiError } from "../lib/public-client";
 import type { PublicEntity, PublicEvent, PublicHistory } from "../lib/public-contract";
+import type { TraceTarget } from "../lib/urls";
 
 const client = createPublicClient(process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
 type Ready = { kind: "ready"; entity: PublicEntity; events: PublicEvent[]; page: PublicHistory["page"] };
 type State = { kind: "loading" } | { kind: "failed"; error: PublicApiError } | Ready;
 const failure = (error: unknown) => error instanceof PublicApiError ? error : new PublicApiError("unavailable");
 
-export function useTrace(tenantId: string, entityId: string) {
+export function useTrace(target: TraceTarget) {
+  const trackingId = "trackingId" in target ? target.trackingId : "";
+  const tenantId = "tenantId" in target ? target.tenantId : "";
+  const entityId = "entityId" in target ? target.entityId : "";
   const [state, setState] = useState<State>({ kind: "loading" });
   const [version, setVersion] = useState(0);
   const [paging, setPaging] = useState(false);
@@ -38,11 +42,18 @@ export function useTrace(tenantId: string, entityId: string) {
     setPaging(false);
     setPageError(null);
     setState({ kind: "loading" });
-    Promise.all([
-      client.entity(tenantId, entityId, controller.signal),
-      client.history(tenantId, entityId, "0", 50, controller.signal),
-    ]).then(([entity, history]) => {
+    const load = async () => {
+      const ids = trackingId ? await client.tracking(trackingId, controller.signal) : { tenantId, entityId };
+      if (controller.signal.aborted) return null;
+      return Promise.all([
+        client.entity(ids.tenantId, ids.entityId, controller.signal),
+        client.history(ids.tenantId, ids.entityId, "0", 50, controller.signal),
+      ]);
+    };
+    load().then(result => {
       if (controller.signal.aborted) return;
+      if (!result) return;
+      const [entity, history] = result;
       // History may have been read after a state update; use its current projection.
       setState({ kind: "ready", entity: history.entity ?? entity, events: history.events, page: history.page });
       document.documentElement.classList.remove("trace-suspended");
@@ -55,7 +66,7 @@ export function useTrace(tenantId: string, entityId: string) {
       document.documentElement.classList.remove("trace-suspended");
     });
     return () => controller.abort();
-  }, [tenantId, entityId, version]);
+  }, [trackingId, tenantId, entityId, version]);
 
   useEffect(() => {
     if (state.kind === "failed") document.documentElement.classList.remove("trace-suspended");
@@ -95,7 +106,7 @@ export function useTrace(tenantId: string, entityId: string) {
     setPaging(true);
     setPageError(null);
     try {
-      const history = await client.history(tenantId, entityId, state.page.nextAfterEventId, 50, controller.signal);
+      const history = await client.history(state.entity.tenantId, state.entity.entityId, state.page.nextAfterEventId, 50, controller.signal);
       if (controller.signal.aborted) return;
       setState(previous => {
         if (previous.kind !== "ready") return previous;

@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unknownId } from "./fixtures";
+import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath, otherTrackingId, otherTenantId } from "./fixtures";
 
 test("lookup is keyboard accessible and navigates normalized IDs", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -190,9 +190,93 @@ test("lookup rejects a foreign origin instead of navigating or contacting it", a
   let externalRequests = 0;
   page.on("request", request => { if (new URL(request.url()).origin === "https://unapproved.example") externalRequests += 1; });
   await page.goto("/");
+  await page.getByRole("button", { name: "Trace link", exact: true }).click();
   await page.getByLabel("Trace link", { exact: true }).fill("https://unapproved.example" + traceUrl);
   await page.getByRole("button", { name: "View public trace" }).click();
   await expect(page.getByRole("alert").filter({ hasText: "Enter a complete trace link from this site" })).toContainText("Enter a complete trace link from this site");
   await expect(page).toHaveURL("http://127.0.0.1:4178/");
   expect(externalRequests).toBe(0);
+});
+
+test("one Tracking ID opens the real gateway and supports accessible copying", async ({ page, context }, testInfo) => {
+  const calls: { path: string; method: string; auth: boolean; cookie: boolean }[] = [];
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  page.on("request", request => {
+    const path = new URL(request.url()).pathname;
+    if (path.startsWith("/public/")) calls.push({ path, method: request.method(), auth: Boolean(request.headers().authorization), cookie: Boolean(request.headers().cookie) });
+  });
+  await page.goto("/");
+  await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
+  await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
+  await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
+  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.locator(".timeline-event")).toHaveCount(4);
+  expect(calls.map(call => call.path).sort()).toEqual([trackingApiPath, apiPath, apiPath + "/history"].sort());
+  expect(calls.every(call => call.method === "GET" && !call.auth && !call.cookie)).toBe(true);
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.getByRole("button", { name: "Copy Tracking ID", exact: true }).click();
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(trackingId);
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("single-id-trace.png") });
+});
+
+test("global tracking IDs distinguish the same Entity ID in two tenants", async ({ page }) => {
+  await page.goto(trackingUrl);
+  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await page.goto("/track/" + otherTrackingId);
+  await expect(page.getByRole("heading", { name: "Other tenant batch provenance" })).toBeVisible();
+  await expect(page.getByText(otherTenantId, { exact: true })).toBeVisible();
+});
+
+test("tracking gateway rejects POST, invalid IDs and query tokens", async ({ request }) => {
+  expect((await request.post(trackingApiPath)).status()).toBe(405);
+  expect((await request.get(trackingApiPath.replace(trackingId, "bad"))).status()).toBe(400);
+  expect((await request.get(trackingApiPath + "?token=synthetic")).status()).toBe(400);
+  const hidden = await request.get(trackingApiPath.replace(trackingId, unknownId));
+  expect(hidden.status()).toBe(404);
+  expect(hidden.headers()["cache-control"]).toBe("no-store");
+  expect(await hidden.json()).toEqual({ error: { code: "entity_not_found", message: "Entity was not found." } });
+});
+
+test("unknown or invalid Tracking IDs never query entity/history routes", async ({ page }) => {
+  const calls: string[] = [];
+  page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/public/")) calls.push(request.url()); });
+  await page.goto("/track/bad");
+  await expect(page.getByRole("heading", { name: "This trace link is invalid" })).toBeVisible();
+  expect(calls).toHaveLength(0);
+  await page.goto("/track/" + unknownId);
+  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  expect(calls).toHaveLength(1);
+  expect(calls[0]).toContain("/public/v1/tracking/");
+});
+
+test("single-ID refresh rechecks publication and clears a revoked mapping", async ({ page }) => {
+  let revoked = false;
+  const calls: string[] = [];
+  await page.route("**/public/**", async route => {
+    const path = new URL(route.request().url()).pathname;
+    calls.push(path);
+    if (path === trackingApiPath) return route.fulfill(revoked ? { status: 404, json: {} } : { json: tracking });
+    return route.fulfill({ json: path.endsWith("/history") ? history() : entity });
+  });
+  await page.goto(trackingUrl);
+  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  revoked = true;
+  await page.getByRole("button", { name: "Refresh record" }).click();
+  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await expect(page.locator("[data-public-record]")).toHaveCount(0);
+  expect(calls).toHaveLength(4);
+  expect(calls.at(-1)).toBe(trackingApiPath);
+});
+
+test("approved single-ID links navigate through the link lookup", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Trace link", exact: true }).click();
+  await page.getByLabel("Trace link", { exact: true }).fill("http://127.0.0.1:4178" + trackingUrl);
+  await page.getByLabel("Trace link", { exact: true }).press("Enter");
+  await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
+  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
 });

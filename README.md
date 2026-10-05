@@ -8,7 +8,9 @@ pending. The verified implementation and commits currently exist locally.
 
 ## Phase 1
 
-- `/`: approved-origin trace-link lookup or validated tenant/entity ID entry.
+- `/`: single Tracking ID, approved-origin trace-link lookup or tenant/entity entry.
+- `/track/:trackingId`: canonical single-ID product tracking; resolves the
+  global public ID before fetching current state and history.
 - `/trace/:tenantId/:entityId`: current public state, custodian organization ID,
   recorded dates, ordered history and copyable provenance hashes.
 - Explicit cursor pagination preserves decimal IDs above `2^53` using strings
@@ -44,7 +46,7 @@ before it can appear. Publication is an operator action, not part of UI startup.
 
 | Variable | Purpose |
 | --- | --- |
-| `NEXT_PUBLIC_API_BASE_URL` | Empty uses the app's two same-origin public GET handlers. An external HTTPS API origin requires its own explicit CORS policy. |
+| `NEXT_PUBLIC_API_BASE_URL` | Empty uses the app's fixed same-origin public GET handlers. An external HTTPS API origin requires its own explicit CORS policy. |
 | `NEXT_PUBLIC_SITE_ORIGIN` | Optional approved canonical HTTPS site origin for pasted trace links and future QR generation. Empty uses the current page origin. |
 | `TRACEFORGE_PUBLIC_API_ORIGIN` | Credential-free server API origin for the GET gateway. Required in production. Development defaults to `http://127.0.0.1:3000`. |
 
@@ -64,7 +66,7 @@ TRACEFORGE_PUBLIC_API_ORIGIN=http://127.0.0.1:3000 NEXT_TELEMETRY_DISABLED=1 npm
 The server binds loopback port 3100. Hosting/HTTPS, CSP, deployment automation
 and a measured proxy rate-limit strategy are later delivery work. The current
 Fastify rate limiter sees requests through this gateway as one source IP and
-shares its 120/minute budget. Do not static-export this app: its two public GET
+shares its 120/minute budget. Do not static-export this app: its public GET
 handlers need a Next Node runtime.
 
 ## Request and privacy boundary
@@ -72,12 +74,13 @@ handlers need a Next Node runtime.
 The browser uses only:
 
 ```text
+GET /public/v1/tracking/:trackingId
 GET /public/v1/tenants/:tenantId/entities/:entityId
 GET /public/v1/tenants/:tenantId/entities/:entityId/history?afterEventId=0&limit=50
 ```
 
 Requests omit cookies and Authorization, disable caching/redirects, and have
-abort signals and ten-second timeouts. By default, Next's two fixed GET handlers
+abort signals and ten-second timeouts. By default, Next's fixed public GET handlers
 forward these requests to the public API with no incoming cookies, credentials
 or forwarding headers. Client and gateway both validate strict response
 allowlists and identity/cursor consistency. Unexpected fields fail closed;

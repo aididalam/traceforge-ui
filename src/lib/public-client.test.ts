@@ -1,14 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPublicClient, PublicApiError, retryTime } from "./public-client";
-import { publicGateway } from "./public-gateway";
+import { publicGateway, publicTrackingGateway } from "./public-gateway";
 import { maxCursor, validateHistory } from "./public-contract";
-import { parseTraceLink, publicOrigin, tracePath } from "./urls";
-import { apiPath, entity, entityId, hash, history, makeEvents, tenantId, traceUrl, unknownId } from "../../tests/fixtures";
+import { parseTraceLink, publicOrigin, tracePath, trackingPath } from "./urls";
+import { apiPath, entity, entityId, hash, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath } from "../../tests/fixtures";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const response = (body: unknown, status = 200, headers = {}) => Response.json(body, { status, headers });
 
 describe("public URL boundary", () => {
+  it("accepts canonical single-ID links while keeping the exact path/origin boundary", () => {
+    expect(trackingPath("0x" + trackingId.slice(2).toUpperCase())).toBe(trackingUrl);
+    expect(parseTraceLink("https://trace.example" + trackingUrl, ["https://trace.example"])).toBe(trackingUrl);
+    for (const suffix of ["/extra", "?token=synthetic", "#secret", "/", "/../bad"]) {
+      expect(() => parseTraceLink("https://trace.example" + trackingUrl + suffix, ["https://trace.example"])).toThrow();
+    }
+    expect(() => trackingPath("bad")).toThrow();
+  });
   it("normalizes mixed-case identifiers and restricts link origins", () => {
     expect(tracePath(tenantId.toUpperCase().replace("0X", "0x"), entityId)).toBe(traceUrl);
     expect(parseTraceLink("https://trace.example" + traceUrl, ["https://trace.example"])).toBe(traceUrl);
@@ -21,6 +29,20 @@ describe("public URL boundary", () => {
 });
 
 describe("token-free client and public contract", () => {
+  it("resolves a single ID without credentials and validates identity/private fields", async () => {
+    const spy = vi.fn<typeof fetch>().mockResolvedValue(response(tracking));
+    const client = createPublicClient("", spy);
+    expect(await client.tracking("0x" + trackingId.slice(2).toUpperCase())).toEqual(tracking);
+    expect(spy.mock.calls[0][0]).toBe(trackingApiPath);
+    expect(spy.mock.calls[0][1]).toMatchObject({ method: "GET", headers: { Accept: "application/json" }, credentials: "omit", cache: "no-store", redirect: "error" });
+    for (const body of [{ ...tracking, trackingId: unknownId }, { ...tracking, tenantId: "bad" }, { ...tracking, document: "SYNTHETIC_PRIVATE_SENTINEL" }]) {
+      spy.mockResolvedValue(response(body));
+      await expect(client.tracking(trackingId)).rejects.toMatchObject({ kind: "unavailable" });
+    }
+    spy.mockClear();
+    await expect(client.tracking("bad")).rejects.toMatchObject({ kind: "invalid" });
+    expect(spy).not.toHaveBeenCalled();
+  });
   it("sends only GET requests without credentials and preserves big cursors", async () => {
     const spy = vi.fn<typeof fetch>().mockResolvedValue(response(history()));
     const client = createPublicClient("", spy);
@@ -73,6 +95,38 @@ describe("token-free client and public contract", () => {
 });
 
 describe("Next public GET gateway", () => {
+  it("resolves tracking through a fixed GET path with no incoming credentials", async () => {
+    vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
+    const spy = vi.fn<typeof fetch>().mockResolvedValue(response(tracking, 200, { "Set-Cookie": "synthetic=fixture" }));
+    vi.stubGlobal("fetch", spy);
+    const request = new Request("https://ui.example" + trackingApiPath, { headers: { Authorization: "Bearer synthetic", Cookie: "synthetic=fixture" } });
+    const result = await publicTrackingGateway(request, trackingId);
+    expect(result.status).toBe(200);
+    expect(await result.json()).toEqual(tracking);
+    expect(result.headers.get("cache-control")).toBe("no-store");
+    expect(result.headers.get("set-cookie")).toBeNull();
+    expect(spy.mock.calls[0][0]).toBe("https://api.example" + trackingApiPath);
+    expect(spy.mock.calls[0][1]).toMatchObject({ headers: { Accept: "application/json" }, credentials: "omit", method: "GET" });
+    spy.mockClear();
+    for (const [url, id] of [[request.url, "bad"], [request.url + "?token=synthetic", trackingId]]) expect((await publicTrackingGateway(new Request(url), id)).status).toBe(400);
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it("fails closed for malformed/wrong tracking responses and sanitizes errors", async () => {
+    vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
+    const spy = vi.fn<typeof fetch>(); vi.stubGlobal("fetch", spy);
+    const request = new Request("https://ui.example" + trackingApiPath);
+    for (const body of [{ ...tracking, trackingId: unknownId }, { ...tracking, document: "SYNTHETIC_PRIVATE_SENTINEL" }]) {
+      spy.mockResolvedValue(response(body));
+      expect((await publicTrackingGateway(request, trackingId)).status).toBe(502);
+    }
+    for (const status of [404, 429, 503]) {
+      spy.mockResolvedValue(response({ private: "SYNTHETIC_PRIVATE_SENTINEL" }, status, { "Retry-After": "3" }));
+      const result = await publicTrackingGateway(request, trackingId);
+      expect(result.status).toBe(status === 503 ? 502 : status);
+      expect(JSON.stringify(await result.json())).not.toContain("SYNTHETIC_PRIVATE_SENTINEL");
+      if (status === 429) expect(result.headers.get("retry-after")).toBe("3");
+    }
+  });
   it("never forwards incoming authorization/cookies and validates safe upstream data", async () => {
     vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
     const spy = vi.fn<typeof fetch>().mockResolvedValue(response(entity, 200, { "Set-Cookie": "synthetic=fixture" }));

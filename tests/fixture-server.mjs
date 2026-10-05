@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { apiPath, entity, history } from "./fixtures.ts";
+import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId } from "./fixtures.ts";
 
 const requests = [];
 const server = createServer((request, reply) => {
@@ -9,6 +9,12 @@ const server = createServer((request, reply) => {
   if (url.pathname === "/__requests") return send(200, requests);
   requests.push({ path: url.pathname, method: request.method, authorization: Boolean(request.headers.authorization), cookie: Boolean(request.headers.cookie) });
   if (request.method !== "GET") return send(405, { error: { code: "method_not_allowed" } });
+  if (url.pathname === trackingApiPath) return send(200, tracking);
+  if (url.pathname === "/public/v1/tracking/" + otherTrackingId) return send(200, { ...tracking, trackingId: otherTrackingId, tenantId: otherTenantId });
+  const otherPath = apiPath.replace(entity.tenantId, otherTenantId);
+  const otherEntity = { ...entity, tenantId: otherTenantId, entityTypeLabel: "Other tenant batch" };
+  if (url.pathname === otherPath) return send(200, otherEntity);
+  if (url.pathname === otherPath + "/history") return send(200, { ...history(), tenantId: otherTenantId, entity: otherEntity });
   if (url.pathname === apiPath) return send(200, entity);
   if (url.pathname === apiPath + "/history") return send(200, history(undefined, url.searchParams.get("afterEventId") ?? "0", Number(url.searchParams.get("limit") ?? "50")));
   return send(404, { error: { code: "entity_not_found", message: "Entity was not found." } });

@@ -54,7 +54,7 @@ export function Problem({ error, retry, inline = false }: { error: PublicApiErro
     error.kind === "invalid" ? "This trace link is invalid" : "Records are temporarily unavailable";
   const description = error.kind === "missing" ? "This trace cannot be viewed publicly. Check the link or ask the organization that provided it." :
     error.kind === "rateLimited" ? "Too many requests were made. Please wait before trying again." :
-    error.kind === "invalid" ? "Use a complete TraceForge link, or enter valid tenant and entity IDs." :
+    error.kind === "invalid" ? "Use a complete TraceForge link or a valid Tracking ID." :
     "We could not reach the public record service. You can try again in a moment.";
   return <section className={inline ? "inline-problem" : "problem-card"} role="alert">
     {!inline && <div className="problem-symbol" aria-hidden="true">↗</div>}
