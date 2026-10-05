@@ -1,5 +1,5 @@
-import { publicEntitySchema, publicTrackingSchema, uint64, validateHistory } from "./public-contract";
-import { normalizeId, publicOrigin } from "./urls";
+import { publicEntitySchema, publicTrackingSchema, publicShortLinkSchema, uint64, validateHistory } from "./public-contract";
+import { normalizeId, normalizeShortCode, publicOrigin } from "./urls";
 
 export type FailureKind = "missing" | "rateLimited" | "invalid" | "unavailable";
 export class PublicApiError extends Error {
@@ -56,6 +56,16 @@ export function createPublicClient(base = "", fetcher: typeof fetch = fetch, tim
   }
 
   return {
+    async shortLink(value: string, signal?: AbortSignal) {
+      const shortCode = normalizeShortCode(value);
+      if (!shortCode) throw new PublicApiError("invalid");
+      const data = await read(`${origin}/public/v1/short-links/${shortCode}`, signal);
+      try {
+        const result = publicShortLinkSchema.parse(data);
+        if (result.shortCode !== shortCode) throw new Error("Mismatched short tracking code.");
+        return result;
+      } catch { throw new PublicApiError("unavailable"); }
+    },
     async tracking(value: string, signal?: AbortSignal) {
       const trackingId = normalizeId(value);
       if (!trackingId) throw new PublicApiError("invalid");

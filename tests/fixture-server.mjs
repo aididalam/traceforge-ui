@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath } from "./fixtures.ts";
+import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath, shortApiPath, shortTracking, otherShortCode, richShortApiPath, richShortTracking } from "./fixtures.ts";
 
 const requests = [];
 const server = createServer((request, reply) => {
@@ -9,6 +9,9 @@ const server = createServer((request, reply) => {
   if (url.pathname === "/__requests") return send(200, requests);
   requests.push({ path: url.pathname, method: request.method, authorization: Boolean(request.headers.authorization), cookie: Boolean(request.headers.cookie) });
   if (request.method !== "GET") return send(405, { error: { code: "method_not_allowed" } });
+  if (url.pathname === shortApiPath) return send(200, shortTracking);
+  if (url.pathname === richShortApiPath) return send(200, richShortTracking);
+  if (url.pathname === "/public/v1/short-links/" + otherShortCode) return send(200, { ...tracking, shortCode: otherShortCode, trackingId: otherTrackingId, tenantId: otherTenantId });
   if (url.pathname === trackingApiPath) return send(200, tracking);
   if (url.pathname === "/public/v1/tracking/" + richTrackingId) return send(200, { ...tracking, trackingId: richTrackingId, entityId: richEntityId });
   if (url.pathname === richApiPath) return send(200, richEntity);

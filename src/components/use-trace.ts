@@ -6,11 +6,12 @@ import type { PublicEntity, PublicEvent, PublicHistory } from "../lib/public-con
 import type { TraceTarget } from "../lib/urls";
 
 const client = createPublicClient(process.env.NEXT_PUBLIC_API_BASE_URL ?? "");
-type Ready = { kind: "ready"; entity: PublicEntity; events: PublicEvent[]; page: PublicHistory["page"] };
+type Ready = { kind: "ready"; trackingId: string | null; entity: PublicEntity; events: PublicEvent[]; page: PublicHistory["page"] };
 type State = { kind: "loading" } | { kind: "failed"; error: PublicApiError } | Ready;
 const failure = (error: unknown) => error instanceof PublicApiError ? error : new PublicApiError("unavailable");
 
 export function useTrace(target: TraceTarget) {
+  const shortCode = "shortCode" in target ? target.shortCode : "";
   const trackingId = "trackingId" in target ? target.trackingId : "";
   const tenantId = "tenantId" in target ? target.tenantId : "";
   const entityId = "entityId" in target ? target.entityId : "";
@@ -43,19 +44,21 @@ export function useTrace(target: TraceTarget) {
     setPageError(null);
     setState({ kind: "loading" });
     const load = async () => {
-      const ids = trackingId ? await client.tracking(trackingId, controller.signal) : { tenantId, entityId };
+      const ids = shortCode ? await client.shortLink(shortCode, controller.signal) :
+        trackingId ? await client.tracking(trackingId, controller.signal) : { tenantId, entityId };
       if (controller.signal.aborted) return null;
-      return Promise.all([
+      const records = await Promise.all([
         client.entity(ids.tenantId, ids.entityId, controller.signal),
         client.history(ids.tenantId, ids.entityId, "0", 50, controller.signal),
       ]);
+      return { records, trackingId: "trackingId" in ids ? ids.trackingId : null };
     };
     load().then(result => {
       if (controller.signal.aborted) return;
       if (!result) return;
-      const [entity, history] = result;
+      const [entity, history] = result.records;
       // History may have been read after a state update; use its current projection.
-      setState({ kind: "ready", entity: history.entity ?? entity, events: history.events, page: history.page });
+      setState({ kind: "ready", trackingId: result.trackingId, entity: history.entity ?? entity, events: history.events, page: history.page });
       document.documentElement.classList.remove("trace-suspended");
     }).catch(error => {
       if (controller.signal.aborted) return;
@@ -66,7 +69,7 @@ export function useTrace(target: TraceTarget) {
       document.documentElement.classList.remove("trace-suspended");
     });
     return () => controller.abort();
-  }, [trackingId, tenantId, entityId, version]);
+  }, [shortCode, trackingId, tenantId, entityId, version]);
 
   useEffect(() => {
     if (state.kind === "failed") document.documentElement.classList.remove("trace-suspended");
@@ -111,7 +114,7 @@ export function useTrace(target: TraceTarget) {
       setState(previous => {
         if (previous.kind !== "ready") return previous;
         const ids = new Set(previous.events.map(event => event.eventId));
-        return { kind: "ready", entity: history.entity,
+        return { kind: "ready", trackingId: previous.trackingId, entity: history.entity,
           events: [...previous.events, ...history.events.filter(event => !ids.has(event.eventId))], page: history.page };
       });
     } catch (error) {

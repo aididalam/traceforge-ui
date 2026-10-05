@@ -2,9 +2,9 @@
 
 import Link from "next/link";
 import { useTrace } from "./use-trace";
-import { displayDate, HashValue, Heading, Problem, RecordedTime, useRetryWait } from "./display";
+import { displayDate, HashValue, Heading, Problem, RecordedTime, CopyTrackingLink, useRetryWait } from "./display";
 import { PublicApiError } from "../lib/public-client";
-import { normalizeId } from "../lib/urls";
+import { normalizeId, normalizeShortCode, shortPath } from "../lib/urls";
 import type { TraceTarget } from "../lib/urls";
 import type { PublicEvent, PublicOrganization } from "../lib/public-contract";
 import { readableLabel } from "../lib/display-labels";
@@ -99,9 +99,13 @@ function ValidTrace({ target }: { target: TraceTarget }) {
       <aside className="record-sidebar">
         <section className="panel identity-panel" aria-labelledby="identity-heading">
           <span className="eyebrow">PRODUCT DETAILS</span><h2 id="identity-heading">Tracking information</h2>
-          {"trackingId" in target && <HashValue label="Tracking ID" value={target.trackingId} />}
+          {"shortCode" in target ? <>
+            <div className="short-tracking-code"><HashValue label="Tracking ID" value={target.shortCode} /></div>
+            <CopyTrackingLink path={shortPath(target.shortCode)} />
+          </> : "trackingId" in target && <HashValue label="Tracking ID" value={target.trackingId} />}
           <details className="identity-extra"><summary>Reference details</summary>
             <p className="small-note">These codes identify the saved product record and its updates.</p>
+            {"shortCode" in target && state.trackingId && <HashValue label="Full tracking reference" value={state.trackingId} />}
             <HashValue label="Workspace reference" value={entity.tenantId} />
             <HashValue label="Internal product reference" value={entity.entityId} />
             <HashValue label="Current holder reference" value={entity.currentCustodian} />
@@ -123,6 +127,11 @@ function ValidTrace({ target }: { target: TraceTarget }) {
 }
 
 export function TraceViewer(target: TraceTarget) {
+  if ("shortCode" in target) {
+    const shortCode = normalizeShortCode(target.shortCode);
+    if (!shortCode) return <Problem error={new PublicApiError("invalid")} retry={() => {}} />;
+    return <ValidTrace key={`short:${shortCode}`} target={{ shortCode }} />;
+  }
   if ("trackingId" in target) {
     const trackingId = normalizeId(target.trackingId);
     if (!trackingId) return <Problem error={new PublicApiError("invalid")} retry={() => {}} />;

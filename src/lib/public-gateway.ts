@@ -1,5 +1,5 @@
-import { publicEntitySchema, publicTrackingSchema, uint64, validateHistory } from "./public-contract";
-import { normalizeId, publicOrigin } from "./urls";
+import { publicEntitySchema, publicTrackingSchema, publicShortLinkSchema, uint64, validateHistory } from "./public-contract";
+import { normalizeId, normalizeShortCode, publicOrigin } from "./urls";
 
 // Server-only by import direction: only App Router GET handlers import this
 // module. No token/signer/DB dependencies, cookies or inbound headers are used.
@@ -36,6 +36,16 @@ export async function publicTrackingGateway(request: Request, value: string) {
   return readPublic(request, `/public/v1/tracking/${trackingId}`, body => {
     const safe = publicTrackingSchema.parse(body);
     if (safe.trackingId !== trackingId) throw new Error("Mismatched tracking ID.");
+    return safe;
+  });
+}
+
+export async function publicShortLinkGateway(request: Request, value: string) {
+  const shortCode = normalizeShortCode(value);
+  if (!shortCode || request.url.includes("?")) return fail(400, "invalid_request", "Invalid short tracking lookup.");
+  return readPublic(request, `/public/v1/short-links/${shortCode}`, body => {
+    const safe = publicShortLinkSchema.parse(body);
+    if (safe.shortCode !== shortCode) throw new Error("Mismatched short tracking code.");
     return safe;
   });
 }

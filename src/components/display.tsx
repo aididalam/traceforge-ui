@@ -33,6 +33,27 @@ export function HashValue({ label, value }: { label: string; value: string }) {
   </div>;
 }
 
+export function CopyTrackingLink({ path }: { path: string }) {
+  const [status, setStatus] = useState<"ready" | "copied" | "failed">("ready");
+  useEffect(() => {
+    if (status !== "copied") return;
+    const timer = setTimeout(() => setStatus("ready"), 2000);
+    return () => clearTimeout(timer);
+  }, [status]);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(new URL(path, window.location.origin).href);
+      setStatus("copied");
+    } catch { setStatus("failed"); }
+  };
+  return <div className="share-tracking">
+    <button className="button secondary" onClick={copy}>{status === "copied" ? "Link copied" : "Copy tracking link"}</button>
+    <span className={status === "failed" ? "small-note" : "sr-only"} role="status">
+      {status === "copied" ? "Tracking link copied." : status === "failed" ? "Copy unavailable. Copy the link from your browser's address bar." : ""}
+    </span>
+  </div>;
+}
+
 export function useRetryWait(retryAt: number) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {

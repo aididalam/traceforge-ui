@@ -4,7 +4,7 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { Heading } from "./display";
-import { trackingPath } from "../lib/urls";
+import { lookupPath } from "../lib/urls";
 
 export function Lookup() {
   const router = useRouter();
@@ -13,7 +13,7 @@ export function Lookup() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const path = trackingPath(tracking.trim());
+      const path = lookupPath(tracking.trim());
       setError("");
       router.push(path);
     } catch { setError("That Tracking ID doesn't look complete. Copy and paste the full ID provided with your product."); }

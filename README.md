@@ -11,8 +11,10 @@ The separate UI repository is [traceforge-ui](https://github.com/aididalam/trace
 
 ## Phase 1
 
-- `/`: one Tracking ID input and a submit button.
-- `/track/:trackingId`: canonical single-ID product tracking; resolves the
+- `/`: one Tracking ID input accepting a short code or a full hex ID.
+- `/s/:shortCode`: shareable 12-character product link, with copyable code/link;
+  uses the same product details and supply history without redirecting.
+- `/track/:trackingId`: full single-ID product tracking; resolves the
   global public ID before fetching current state and history.
 - `/trace/:tenantId/:entityId`: current public state, custodian organization ID,
   recorded dates, ordered history and copyable provenance hashes.
@@ -93,6 +95,7 @@ The browser uses only:
 
 ```text
 GET /public/v1/tracking/:trackingId
+GET /public/v1/short-links/:shortCode
 GET /public/v1/tenants/:tenantId/entities/:entityId
 GET /public/v1/tenants/:tenantId/entities/:entityId/history?afterEventId=0&limit=50
 ```
@@ -103,6 +106,15 @@ forward these requests to the public API with no incoming cookies, credentials
 or forwarding headers. Client and gateway both validate strict response
 allowlists and identity/cursor consistency. Unexpected fields fail closed;
 upstream error bodies and Set-Cookie headers never pass through the gateway.
+
+A short-code lookup resolves the global ID and internal pair in one request,
+then uses the existing public detail/history endpoints: three initial GETs,
+the same as a full-ID lookup. Codes are case-insensitive on input and displayed
+in lowercase. The short page keeps the full Tracking ID in Reference details.
+Copy tracking link uses this page's origin and validated `/s/<code>` path.
+Refresh resolves again and hides unavailable/revoked records. Migration 007
+is prepared and temporarily verified; permanent activation is pending. See
+[short-link design](https://github.com/aididalam/traceforge/blob/main/docs/public-short-links.md).
 
 There are no document/operator/write/RPC calls, SQL connections, private keys,
 wallets, session/token storage, service workers or persistent provenance caches.
@@ -137,6 +149,8 @@ cover real gateway round trips, keyboard/clipboard/axe behavior, pagination,
 revocation, visibility refresh, rate limits, invalid inputs and private-field
 rejection, public product fields, business names, transfer participants and
 event dates. They use no live API, DB rows, tokens, keys or blockchain writes.
+Short-link checks also cover code input/copying, exact cursors, separate
+workspaces, revocation, strict response validation and forbidden redirect targets.
 Keep ports 4178 and 4202 free. Screenshots/traces are generated in ignored
 `test-results/`; servers shut down when the suite ends.
 

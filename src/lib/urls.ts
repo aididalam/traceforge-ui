@@ -1,5 +1,21 @@
 const bytes32 = /^0x[0-9a-fA-F]{64}$/;
-export type TraceTarget = { trackingId: string } | { tenantId: string; entityId: string };
+export type TraceTarget = { shortCode: string } | { trackingId: string } | { tenantId: string; entityId: string };
+const shortCodePattern = /^[0123456789abcdefghjkmnpqrstvwxyz]{12}$/;
+
+export function normalizeShortCode(value: string): string | null {
+  const code = value.toLowerCase();
+  return shortCodePattern.test(code) ? code : null;
+}
+
+export function shortPath(value: string): string {
+  const code = normalizeShortCode(value);
+  if (!code) throw new Error("Invalid short tracking code.");
+  return `/s/${code}`;
+}
+
+export function lookupPath(value: string): string {
+  return normalizeShortCode(value) ? shortPath(value) : trackingPath(value);
+}
 
 export function normalizeId(value: string): string | null {
   return bytes32.test(value) ? value.toLowerCase() : null;
@@ -36,6 +52,8 @@ export function parseTraceLink(value: string, allowedOrigins: string[], allowLoo
   }
   const tracking = /^\/track\/([^/]+)$/.exec(url.pathname);
   if (tracking) return trackingPath(tracking[1]);
+  const short = /^\/s\/([^/]+)$/.exec(url.pathname);
+  if (short) return shortPath(short[1]);
   const match = /^\/trace\/([^/]+)\/([^/]+)$/.exec(url.pathname);
   if (!match) throw new Error("The link must contain a tenant ID and entity ID.");
   return tracePath(match[1], match[2]);

@@ -10,6 +10,11 @@ export const otherTenantId = "0x" + "12".repeat(32);
 export const tracking = { trackingId, tenantId, entityId };
 export const trackingUrl = `/track/${trackingId}`;
 export const trackingApiPath = `/public/v1/tracking/${trackingId}`;
+export const shortCode = "0123456789ab";
+export const otherShortCode = "abcdef012345";
+export const shortTracking = { shortCode, ...tracking };
+export const shortUrl = `/s/${shortCode}`;
+export const shortApiPath = `/public/v1/short-links/${shortCode}`;
 export const hash = "0x" + "44".repeat(32);
 export const entity: PublicEntity = {
   tenantId, entityId, entityType: hash, entityTypeLabel: "Batch",
@@ -50,6 +55,10 @@ export const richEntity: PublicEntity = { ...entity, entityId: richEntityId, cur
       { label: "Packaging", value: "Packed" }, { label: "Quality", value: "Approved" }] } };
 export const richTrackingUrl = `/track/${richTrackingId}`;
 export const richApiPath = `/public/v1/tenants/${tenantId}/entities/${richEntityId}`;
+export const richShortCode = "mnpqrstvwxyz";
+export const richShortUrl = `/s/${richShortCode}`;
+export const richShortApiPath = `/public/v1/short-links/${richShortCode}`;
+export const richShortTracking = { shortCode: richShortCode, trackingId: richTrackingId, tenantId, entityId: richEntityId };
 export function richHistory() {
   const events = makeEvents().map((event, index) => ({ ...event,
     eventName: index === 2 ? "CustodyTransferred" : event.eventName,

@@ -116,6 +116,9 @@ summary { cursor: pointer; color: #4b6340; min-height: 32px; padding: 6px 0; fon
 .copy-button { flex-shrink: 0; font-size: 10px; padding: 5px 6px; min-height: 32px; border: 1px solid #d7dece; border-radius: 4px; color: #43583a; background: transparent; }
 .copy-button:hover { background: #edf2e7; }
 .identity-extra { margin-top: 17px; }
+.share-tracking { display: grid; gap: 8px; margin-top: 15px; }
+.share-tracking .button { width: 100%; }
+.short-tracking-code .hash-content code { font-size: 18px; letter-spacing: .06em; line-height: 1.7; }
 .reading-note { padding: 20px 25px; border-radius: 10px; background: #eceee4; }
 .note-icon { width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid #8a997b; border-radius: 50%; font-family: Georgia, serif; font-size: 14px; color: #46583a; }
 .reading-note h2 { font-size: 16px; margin: 14px 0 12px; }

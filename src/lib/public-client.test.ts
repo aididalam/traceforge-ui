@@ -1,15 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPublicClient, PublicApiError, retryTime } from "./public-client";
-import { publicGateway, publicTrackingGateway } from "./public-gateway";
+import { publicGateway, publicTrackingGateway, publicShortLinkGateway } from "./public-gateway";
 import { maxCursor, validateHistory, publicEntitySchema } from "./public-contract";
 import { recordedTime } from "../components/display";
-import { parseTraceLink, publicOrigin, tracePath, trackingPath } from "./urls";
-import { apiPath, entity, entityId, hash, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath } from "../../tests/fixtures";
+import { parseTraceLink, publicOrigin, tracePath, trackingPath, shortPath, lookupPath, normalizeShortCode } from "./urls";
+import { apiPath, entity, entityId, hash, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath, shortCode, shortUrl, shortApiPath, shortTracking, otherShortCode } from "../../tests/fixtures";
 
 afterEach(() => { vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 const response = (body: unknown, status = 200, headers = {}) => Response.json(body, { status, headers });
 
 describe("public URL boundary", () => {
+  it("accepts short codes in the single lookup field and restricts short URLs to approved origins", () => {
+    expect(normalizeShortCode(shortCode.toUpperCase())).toBe(shortCode);
+    expect(shortPath(shortCode.toUpperCase())).toBe(shortUrl);
+    expect(lookupPath(shortCode)).toBe(shortUrl);
+    expect(lookupPath(trackingId)).toBe(trackingUrl);
+    expect(() => trackingPath(shortCode)).toThrow();
+    expect(parseTraceLink("https://trace.example" + shortUrl, ["https://trace.example"])).toBe(shortUrl);
+    for (const code of ["bad", "i".repeat(12), "u".repeat(12), shortCode + "/", shortCode + "?url=external"]) expect(() => shortPath(code)).toThrow();
+    for (const url of ["https://other.example" + shortUrl, "https://trace.example" + shortUrl + "?token=synthetic",
+      "https://trace.example" + shortUrl + "#secret", "https://trace.example" + shortUrl + "/extra"]) {
+      expect(() => parseTraceLink(url, ["https://trace.example"])).toThrow();
+    }
+  });
   it("accepts canonical single-ID links while keeping the exact path/origin boundary", () => {
     expect(trackingPath("0x" + trackingId.slice(2).toUpperCase())).toBe(trackingUrl);
     expect(parseTraceLink("https://trace.example" + trackingUrl, ["https://trace.example"])).toBe(trackingUrl);
@@ -30,6 +43,21 @@ describe("public URL boundary", () => {
 });
 
 describe("token-free client and public contract", () => {
+  it("resolves short codes without credentials and rejects mismatched or private response fields", async () => {
+    const spy = vi.fn<typeof fetch>().mockResolvedValue(response(shortTracking));
+    const client = createPublicClient("", spy);
+    expect(await client.shortLink(shortCode.toUpperCase())).toEqual(shortTracking);
+    expect(spy.mock.calls[0][0]).toBe(shortApiPath);
+    expect(spy.mock.calls[0][1]).toMatchObject({ method: "GET", credentials: "omit", cache: "no-store", redirect: "error", headers: { Accept: "application/json" } });
+    for (const body of [{ ...shortTracking, shortCode: otherShortCode }, { ...shortTracking, trackingId: "bad" },
+      { ...shortTracking, url: "https://external.example" }, { ...shortTracking, metadata_document: { private: true } }]) {
+      spy.mockResolvedValue(response(body));
+      await expect(client.shortLink(shortCode)).rejects.toMatchObject({ kind: "unavailable" });
+    }
+    spy.mockClear();
+    await expect(client.shortLink("bad")).rejects.toMatchObject({ kind: "invalid" });
+    expect(spy).not.toHaveBeenCalled();
+  });
   it("validates shared details and dates without allowing document bodies or conflicting holder references", () => {
     const holder = { id: entity.currentCustodian, name: "Demo business", type: "Distributor" };
     expect(publicEntitySchema.parse({ ...entity, currentHolder: holder }).currentHolder).toEqual(holder);
@@ -114,6 +142,40 @@ describe("token-free client and public contract", () => {
 });
 
 describe("Next public GET gateway", () => {
+  it("uses a fixed short-code path and never forwards credentials or a redirect target", async () => {
+    vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
+    const spy = vi.fn<typeof fetch>().mockResolvedValue(response(shortTracking, 200, { "Set-Cookie": "synthetic=fixture" }));
+    vi.stubGlobal("fetch", spy);
+    const request = new Request("https://ui.example" + shortApiPath, { headers: { Authorization: "Bearer synthetic", Cookie: "synthetic=fixture" } });
+    const result = await publicShortLinkGateway(request, shortCode.toUpperCase());
+    expect(result.status).toBe(200); expect(await result.json()).toEqual(shortTracking);
+    expect(result.headers.get("cache-control")).toBe("no-store"); expect(result.headers.get("set-cookie")).toBeNull();
+    expect(result.headers.get("location")).toBeNull();
+    expect(spy.mock.calls[0][0]).toBe("https://api.example" + shortApiPath);
+    expect(spy.mock.calls[0][1]).toMatchObject({ method: "GET", credentials: "omit", redirect: "error", headers: { Accept: "application/json" } });
+    spy.mockClear();
+    for (const [url, code] of [[request.url, "bad"], [request.url + "?token=synthetic", shortCode], [request.url + "?url=https://external.example", shortCode]]) {
+      expect((await publicShortLinkGateway(new Request(url), code)).status).toBe(400);
+    }
+    expect(spy).not.toHaveBeenCalled();
+  });
+  it("sanitizes short-code failures and rejects private fields or upstream redirects", async () => {
+    vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
+    const spy = vi.fn<typeof fetch>(); vi.stubGlobal("fetch", spy);
+    const request = new Request("https://ui.example" + shortApiPath);
+    for (const body of [{ ...shortTracking, shortCode: otherShortCode }, { ...shortTracking, redirectTo: "https://external.example" }]) {
+      spy.mockResolvedValue(response(body));
+      expect((await publicShortLinkGateway(request, shortCode)).status).toBe(502);
+    }
+    for (const status of [302, 404, 429, 503]) {
+      spy.mockResolvedValue(response({ private: "SYNTHETIC_PRIVATE_SENTINEL" }, status, { "Retry-After": "3", Location: "https://external.example" }));
+      const result = await publicShortLinkGateway(request, shortCode);
+      expect(result.status).toBe(status === 404 || status === 429 ? status : 502);
+      expect(result.headers.get("location")).toBeNull();
+      expect(JSON.stringify(await result.json())).not.toContain("SYNTHETIC_PRIVATE_SENTINEL");
+      if (status === 429) expect(result.headers.get("retry-after")).toBe("3");
+    }
+  });
   it("resolves tracking through a fixed GET path with no incoming credentials", async () => {
     vi.stubEnv("TRACEFORGE_PUBLIC_API_ORIGIN", "https://api.example");
     const spy = vi.fn<typeof fetch>().mockResolvedValue(response(tracking, 200, { "Set-Cookie": "synthetic=fixture" }));

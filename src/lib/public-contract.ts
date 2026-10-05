@@ -13,6 +13,10 @@ const productInfo = z.strictObject({
 });
 
 export const publicTrackingSchema = z.strictObject({ trackingId: hash, tenantId: hash, entityId: hash });
+export const publicShortLinkSchema = z.strictObject({
+  shortCode: z.string().transform(value => value.toLowerCase()).pipe(z.string().regex(/^[0123456789abcdefghjkmnpqrstvwxyz]{12}$/)),
+  trackingId: hash, tenantId: hash, entityId: hash,
+});
 
 export const publicEntitySchema = z.strictObject({
   tenantId: hash, entityId: hash, entityType: hash, entityTypeLabel: label,
