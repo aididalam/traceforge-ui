@@ -1,10 +1,13 @@
 # TraceForge UI
 
-Next.js App Router + TypeScript public provenance viewer for TraceForge v0.30.
-This is the separate `traceforge-ui` repository, mounted at `ui/` in the root
-project as a Git submodule. The configured remote is
-`https://github.com/aididalam/traceforge-ui.git`; remote creation/publication is
-pending. The verified implementation and commits currently exist locally.
+Next.js App Router + TypeScript product tracking interface for TraceForge v0.30.
+
+## Parent project
+
+This repository is the `ui/` submodule of
+[TraceForge](https://github.com/aididalam/traceforge).
+See the parent repository for all components, architecture and setup.
+The separate UI repository is [traceforge-ui](https://github.com/aididalam/traceforge-ui).
 
 ## Phase 1
 
