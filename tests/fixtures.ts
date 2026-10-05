@@ -22,7 +22,8 @@ export function makeEvents(count = 4): PublicEvent[] {
     eventName: index === 0 ? "EntityCreated" : "TraceRecorded",
     blockNumber: String(12340 + index), transactionHash: hash, transactionIndex: 0, logIndex: index,
     eventType: index ? hash : null,
-    eventTypeLabel: ["Entity created", "Quality inspection", "Quality approved", "Packaging recorded"][index] ?? `Checkpoint ${index + 1}`,
+    // Include legacy platform labels that must be readable in the public UI.
+    eventTypeLabel: ["Entity created", "EntityMetadataRevised", "CustodyTransferAccepted", "GenericAPIRecordTraceProof"][index] ?? `Checkpoint ${index + 1}`,
     stateAfter: hash, stateAfterLabel: index < 2 ? "Created" : "Quality approved",
     linkType: null, linkTypeLabel: null, metadataHash: hash, evidenceHash: index ? "0x" + "66".repeat(32) : null,
   }));

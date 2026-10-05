@@ -7,9 +7,12 @@ const familiarLabels: Record<string, string> = {
   tracerecorded: "Update recorded",
   metadataupdated: "Product information updated",
   metadatarevised: "Product information updated",
+  entitymetadataupdated: "Product information updated",
+  entitymetadatarevised: "Product information updated",
   custodyproposed: "Transfer requested",
   custodyaccepted: "Transfer accepted",
   custodytransferproposed: "Transfer requested",
+  custodytransferaccepted: "Transfer accepted",
   custodytransferred: "Responsibility transferred",
   custodytransfercancelled: "Transfer cancelled",
   custodytransfercancelledbyadmin: "Transfer cancelled by administrator",
@@ -17,9 +20,12 @@ const familiarLabels: Record<string, string> = {
   entitylinkstatuschanged: "Product connection updated",
   entityclosed: "Tracking closed",
   batchregistered: "Batch registered",
+  batchpacked: "Batch packed",
+  batchqualityapproved: "Batch quality approved",
   qualityapproved: "Quality approved",
   qualitycheckpassed: "Quality check passed",
   genericapimockproof: "Test update",
+  genericapirecordtraceproof: "Tracking update recorded",
 };
 
 export function readableLabel(value: string): string {
