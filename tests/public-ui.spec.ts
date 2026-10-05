@@ -2,17 +2,21 @@ import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath, otherTrackingId, otherTenantId } from "./fixtures";
 
-test("lookup is keyboard accessible and navigates normalized IDs", async ({ page }, testInfo) => {
+test("lookup offers only Tracking ID and supports keyboard entry", async ({ page }, testInfo) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Every record has a journey." })).toBeVisible();
+  await expect(page.getByRole("textbox")).toHaveCount(1);
+  await expect(page.getByLabel("Tracking ID", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^(Tracking ID|Trace link|Entity IDs)$/ })).toHaveCount(0);
+  await expect(page.getByLabel("Tenant ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Entity ID", { exact: true })).toHaveCount(0);
+  await expect(page.getByLabel("Trace link", { exact: true })).toHaveCount(0);
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("lookup.png") });
-  await page.getByRole("button", { name: "Entity IDs", exact: true }).click();
-  await page.getByLabel("Tenant ID", { exact: true }).fill("0x" + tenantId.slice(2).toUpperCase());
-  await page.getByLabel("Entity ID", { exact: true }).fill(entityId);
-  await page.getByLabel("Entity ID", { exact: true }).press("Enter");
-  await expect(page).toHaveURL(new RegExp(traceUrl + "$"));
+  await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
+  await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
+  await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
   await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
 });
 
@@ -186,16 +190,20 @@ test("loading, API failure and unexpected document data never render private fie
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
 });
 
-test("lookup rejects a foreign origin instead of navigating or contacting it", async ({ page }) => {
+test("lookup rejects malformed IDs and pasted URLs before any API request", async ({ page }) => {
   let externalRequests = 0;
+  let apiRequests = 0;
   page.on("request", request => { if (new URL(request.url()).origin === "https://unapproved.example") externalRequests += 1; });
+  await page.route("**/public/**", async route => { apiRequests += 1; await route.abort(); });
   await page.goto("/");
-  await page.getByRole("button", { name: "Trace link", exact: true }).click();
-  await page.getByLabel("Trace link", { exact: true }).fill("https://unapproved.example" + traceUrl);
-  await page.getByRole("button", { name: "View public trace" }).click();
-  await expect(page.getByRole("alert").filter({ hasText: "Enter a complete trace link from this site" })).toContainText("Enter a complete trace link from this site");
-  await expect(page).toHaveURL("http://127.0.0.1:4178/");
+  for (const value of ["bad", "0x" + "gg".repeat(32), "https://unapproved.example" + trackingUrl]) {
+    await page.getByLabel("Tracking ID", { exact: true }).fill(value);
+    await page.getByRole("button", { name: "View public trace" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "Enter a complete Tracking ID" })).toContainText("0x followed by 64 hexadecimal characters");
+    await expect(page).toHaveURL("http://127.0.0.1:4178/");
+  }
   expect(externalRequests).toBe(0);
+  expect(apiRequests).toBe(0);
 });
 
 test("one Tracking ID opens the real gateway and supports accessible copying", async ({ page, context }, testInfo) => {
@@ -272,11 +280,10 @@ test("single-ID refresh rechecks publication and clears a revoked mapping", asyn
   expect(calls.at(-1)).toBe(trackingApiPath);
 });
 
-test("approved single-ID links navigate through the link lookup", async ({ page }) => {
+test("submitting an unknown Tracking ID opens the public unavailable state", async ({ page }) => {
   await page.goto("/");
-  await page.getByRole("button", { name: "Trace link", exact: true }).click();
-  await page.getByLabel("Trace link", { exact: true }).fill("http://127.0.0.1:4178" + trackingUrl);
-  await page.getByLabel("Trace link", { exact: true }).press("Enter");
-  await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await page.getByLabel("Tracking ID", { exact: true }).fill(unknownId);
+  await page.getByRole("button", { name: "View public trace" }).click();
+  await expect(page).toHaveURL(new RegExp("/track/" + unknownId + "$"));
+  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
 });

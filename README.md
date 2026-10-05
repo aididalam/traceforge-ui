@@ -8,7 +8,7 @@ pending. The verified implementation and commits currently exist locally.
 
 ## Phase 1
 
-- `/`: single Tracking ID, approved-origin trace-link lookup or tenant/entity entry.
+- `/`: one Tracking ID input and a submit button.
 - `/track/:trackingId`: canonical single-ID product tracking; resolves the
   global public ID before fetching current state and history.
 - `/trace/:tenantId/:entityId`: current public state, custodian organization ID,
@@ -47,7 +47,7 @@ before it can appear. Publication is an operator action, not part of UI startup.
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | Empty uses the app's fixed same-origin public GET handlers. An external HTTPS API origin requires its own explicit CORS policy. |
-| `NEXT_PUBLIC_SITE_ORIGIN` | Optional approved canonical HTTPS site origin for pasted trace links and future QR generation. Empty uses the current page origin. |
+| `NEXT_PUBLIC_SITE_ORIGIN` | Optional canonical HTTPS site origin reserved for future QR generation. Empty uses the current page origin. |
 | `TRACEFORGE_PUBLIC_API_ORIGIN` | Credential-free server API origin for the GET gateway. Required in production. Development defaults to `http://127.0.0.1:3000`. |
 
 All origins reject credentials, path prefixes, queries and fragments. Public

@@ -46,9 +46,7 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monosp
 .lookup-card { padding: 33px; }
 .lookup-card h2 { font-size: 27px; margin-top: 14px; margin-bottom: 14px; }
 .lookup-card > p { font-size: 13px; max-width: 300px; }
-.lookup-modes { display: flex; padding: 4px; background: #efefe7; border-radius: 7px; margin: 24px 0; }
-.lookup-modes button { flex: 1; border: 0; border-radius: 5px; background: transparent; min-height: 40px; color: #52614b; font-size: 12px; font-weight: 600; }
-.lookup-modes button[aria-pressed=true] { background: var(--white); box-shadow: 0 1px 4px #26382c17; color: var(--ink); }
+.lookup-card form { margin-top: 24px; }
 .input-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 18px; }
 input { width: 100%; border: 1px solid #cbd4c4; background: white; color: var(--ink); border-radius: 6px; padding: 12px 11px; margin-top: 8px; min-height: 46px; font-size: 13px; }
 input::placeholder { color: #6c7568; }
