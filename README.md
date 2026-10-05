@@ -25,6 +25,21 @@ QR generation/scanning and operator login/write screens are subsequent phases.
 Only explicitly published public API data is displayed. There is no production
 demo fallback: an unpublished or nonexistent entity stays unavailable.
 
+## Public wording
+
+Consumer screens use product tracking, current status, current holder and
+product history. Known technical event labels are translated into familiar
+phrases, and CamelCase business labels are spaced for reading. Labels remain
+plain text; the API data and meaning of custom business labels are preserved.
+
+The Tracking ID stays visible. Internal identifiers and supporting-information
+references are available inside closed “Reference details” and “Update
+references” sections. Displayed update numbers indicate their position in the
+shared history; full saved IDs remain in the expanded references. Missing names
+and out-of-range dates are described plainly, with original values preserved
+under references. No holder names, document contents or verification claims
+are invented from IDs. Public sharing boundaries remain explicit.
+
 ## Local development
 
 Use Node 22.13+ within the Node 22 release line, or Node 24+. CI uses Node 22.

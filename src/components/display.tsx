@@ -50,12 +50,12 @@ export function useRetryWait(retryAt: number) {
 
 export function Problem({ error, retry, inline = false }: { error: PublicApiError; retry: () => void; inline?: boolean }) {
   const wait = useRetryWait(error.retryAt);
-  const title = error.kind === "missing" ? "Public trace unavailable" : error.kind === "rateLimited" ? "A short pause" :
-    error.kind === "invalid" ? "This trace link is invalid" : "Records are temporarily unavailable";
-  const description = error.kind === "missing" ? "This trace cannot be viewed publicly. Check the link or ask the organization that provided it." :
-    error.kind === "rateLimited" ? "Too many requests were made. Please wait before trying again." :
-    error.kind === "invalid" ? "Use a complete TraceForge link or a valid Tracking ID." :
-    "We could not reach the public record service. You can try again in a moment.";
+  const title = error.kind === "missing" ? "Product history unavailable" : error.kind === "rateLimited" ? "Please wait a moment" :
+    error.kind === "invalid" ? "Check your Tracking ID" : "Product tracking is temporarily unavailable";
+  const description = error.kind === "missing" ? "We can't show this product's history. Check the Tracking ID or ask the business that gave it to you." :
+    error.kind === "rateLimited" ? "Please wait before checking again." :
+    error.kind === "invalid" ? "Copy and paste the complete Tracking ID provided with your product, then try again." :
+    "We couldn't load the product's history. Please try again in a moment.";
   return <section className={inline ? "inline-problem" : "problem-card"} role="alert">
     {!inline && <div className="problem-symbol" aria-hidden="true">↗</div>}
     {inline ? <h3>{title}</h3> : <Heading>{title}</Heading>}
@@ -64,13 +64,13 @@ export function Problem({ error, retry, inline = false }: { error: PublicApiErro
       {error.kind !== "invalid" && <button className="button primary" onClick={retry} disabled={wait > 0}>
         {wait > 0 ? `Try again in ${wait}s` : "Try again"}
       </button>}
-      {!inline && <Link className="button secondary" href="/" prefetch={false}>Back to lookup</Link>}
+      {!inline && <Link className="button secondary" href="/" prefetch={false}>Track another product</Link>}
     </div>
   </section>;
 }
 
 export function displayDate(value: string): string {
   const millis = BigInt(value) * 1000n;
-  if (millis > 8640000000000000n) return `Unix seconds ${value}`;
+  if (millis > 8640000000000000n) return "Date unavailable";
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(Number(millis)));
 }

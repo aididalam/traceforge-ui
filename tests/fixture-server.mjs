@@ -12,7 +12,7 @@ const server = createServer((request, reply) => {
   if (url.pathname === trackingApiPath) return send(200, tracking);
   if (url.pathname === "/public/v1/tracking/" + otherTrackingId) return send(200, { ...tracking, trackingId: otherTrackingId, tenantId: otherTenantId });
   const otherPath = apiPath.replace(entity.tenantId, otherTenantId);
-  const otherEntity = { ...entity, tenantId: otherTenantId, entityTypeLabel: "Other tenant batch" };
+  const otherEntity = { ...entity, tenantId: otherTenantId, entityTypeLabel: "Second batch" };
   if (url.pathname === otherPath) return send(200, otherEntity);
   if (url.pathname === otherPath + "/history") return send(200, { ...history(), tenantId: otherTenantId, entity: otherEntity });
   if (url.pathname === apiPath) return send(200, entity);

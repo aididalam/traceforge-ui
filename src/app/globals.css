@@ -83,7 +83,6 @@ input::placeholder { color: #6c7568; }
 .timeline-dot { position: absolute; top: 4px; left: -5px; width: 9px; height: 9px; background: #607b47; border-radius: 50%; outline: 4px solid var(--white); }
 .event-top { display: flex; flex-wrap: wrap; gap: 9px; justify-content: space-between; align-items: baseline; margin-bottom: 9px; }
 .event-top .eyebrow { font-family: ui-monospace, monospace; font-size: 9px; letter-spacing: .035em; }
-.block-label { font-size: 10px; color: #626b5c; }
 .timeline-event h3 { font-size: 19px; margin-bottom: 12px; overflow-wrap: anywhere; }
 .event-tags { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tag { font-size: 10px; background: #edf2e7; color: #455d39; border: 1px solid #d7e3c9; border-radius: 4px; padding: 3px 8px; max-width: 100%; overflow-wrap: anywhere; }

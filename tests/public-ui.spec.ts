@@ -4,7 +4,7 @@ import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unk
 
 test("lookup offers only Tracking ID and supports keyboard entry", async ({ page }, testInfo) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Every record has a journey." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Every product has a journey." })).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(1);
   await expect(page.getByLabel("Tracking ID", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^(Tracking ID|Trace link|Entity IDs)$/ })).toHaveCount(0);
@@ -17,7 +17,7 @@ test("lookup offers only Tracking ID and supports keyboard entry", async ({ page
   await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
   await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
   await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
 });
 
 test("production Next gateway shows only safe records without cookies or tokens", async ({ page, context, request }, testInfo) => {
@@ -28,16 +28,23 @@ test("production Next gateway shows only safe records without cookies or tokens"
     if (/^\/(public|v1|rpc)/.test(path)) apiRequests.push({ path, method: item.method(), authorization: Boolean(item.headers().authorization), cookie: Boolean(item.headers().cookie) });
   });
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Recorded journey" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product history" })).toBeVisible();
   await expect(page.locator(".timeline-event")).toHaveCount(4);
-  await expect(page.getByText("EVENT 9007199254740993", { exact: true })).toBeVisible();
+  await expect(page.getByText("UPDATE 1", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product added", exact: true })).toBeVisible();
+  await expect(page.getByText("Current status", { exact: true })).toBeVisible();
+  await expect(page.getByText("Current holder", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(/\b(entity|metadata|tenant|custodian|provenance|hash)\b/i);
   expect(apiRequests).toHaveLength(2);
   expect(apiRequests.every(item => item.method === "GET" && !item.authorization && !item.cookie && item.path.startsWith("/public/v1/"))).toBe(true);
-  await page.locator(".timeline-event").first().getByText("Record details", { exact: true }).click();
-  await expect(page.getByText("EntityCreated · Transaction index 0 · Log 0")).toBeVisible();
+  await page.locator(".timeline-event").first().getByText("Update references", { exact: true }).click();
+  await expect(page.getByText("Update reference: 9007199254740993 · Record group: 12340", { exact: true })).toBeVisible();
+  await expect(page.getByText("Product added · Entry 0 · Position 0")).toBeVisible();
   await context.grantPermissions(["clipboard-read", "clipboard-write"]);
-  await page.getByRole("button", { name: "Copy Entity ID", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Copy Internal product reference", exact: true })).toBeHidden();
+  await page.getByText("Reference details", { exact: true }).click();
+  await page.getByRole("button", { name: "Copy Internal product reference", exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(entityId);
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations).toEqual([]);
@@ -69,11 +76,11 @@ test("cursor pagination remains exact above 2^53 without duplicate events", asyn
   });
   await page.goto(traceUrl);
   await expect(page.locator(".timeline-event")).toHaveCount(50);
-  await page.getByRole("button", { name: "Load more events", exact: true }).click();
+  await page.getByRole("button", { name: "Show more updates", exact: true }).click();
   await expect(page.locator(".timeline-event")).toHaveCount(53);
   expect(cursors).toEqual(["0", events[49].eventId]);
-  await expect(page.getByRole("button", { name: "Load more events", exact: true })).toHaveCount(0);
-  await expect(page.getByText("All currently available public events are loaded.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Show more updates", exact: true })).toHaveCount(0);
+  await expect(page.getByText("This is all the history currently shared for this product.")).toBeVisible();
 });
 
 test("revocation during load more clears the entire previous record", async ({ page }) => {
@@ -84,8 +91,8 @@ test("revocation during load more clears the entire previous record", async ({ p
   });
   await page.goto(traceUrl);
   await expect(page.locator(".timeline-event")).toHaveCount(50);
-  await page.getByRole("button", { name: "Load more events", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await page.getByRole("button", { name: "Show more updates", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
   await expect(page.getByText(entityId, { exact: true })).toHaveCount(0);
 });
@@ -94,12 +101,12 @@ test("returning to a hidden page revalidates publication", async ({ page }) => {
   let revoked = false;
   await page.route("**/public/**", async route => route.fulfill(revoked ? { status: 404, json: {} } : { json: route.request().url().includes("/history") ? history() : entity }));
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "hidden" }); document.dispatchEvent(new Event("visibilitychange")); });
   await expect(page.locator("[data-public-record]")).toBeHidden();
   revoked = true;
   await page.evaluate(() => { Object.defineProperty(document, "visibilityState", { configurable: true, value: "visible" }); document.dispatchEvent(new Event("visibilitychange")); });
-  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
 });
 
@@ -111,14 +118,14 @@ test("rate limited reads honor Retry-After and only retry after user action", as
     await route.fulfill(ready ? { json: route.request().url().includes("/history") ? history() : entity } : { status: 429, headers: { "Retry-After": "1" }, json: {} });
   });
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: "A short pause" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Please wait a moment" })).toBeVisible();
   await expect(page.getByRole("button", { name: /Try again in/ })).toBeDisabled();
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
   await expect(page.getByRole("button", { name: "Try again", exact: true })).toBeEnabled();
   expect(count).toBe(2);
   ready = true;
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
 });
 
 test("pagination rate limits also block refresh and restored-page requests", async ({ page }) => {
@@ -133,9 +140,9 @@ test("pagination rate limits also block refresh and restored-page requests", asy
   });
   await page.goto(traceUrl);
   await expect(page.locator(".timeline-event")).toHaveCount(50);
-  await page.getByRole("button", { name: "Load more events", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "A short pause" })).toBeVisible();
-  await page.getByRole("button", { name: "Refresh record" }).click();
+  await page.getByRole("button", { name: "Show more updates", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Please wait a moment" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh" }).click();
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true })));
   await expect(page.getByRole("button", { name: /Try again in/ })).toBeDisabled();
@@ -146,16 +153,17 @@ test("empty history and null labels are readable without inferred product data",
   const unknown = { ...entity, entityTypeLabel: null, currentStateLabel: null, closed: true, closedAt: "1790000120" };
   await page.route("**/public/**", async route => route.fulfill({ json: route.request().url().includes("/history") ? { ...history([]), entity: unknown } : unknown }));
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: "Entity provenance" })).toBeVisible();
-  await expect(page.getByText("Closed entity", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "No public history yet" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product tracking" })).toBeVisible();
+  await expect(page.getByText("Tracking closed", { exact: true })).toBeVisible();
+  await expect(page.getByText("Status name unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "No updates yet" })).toBeVisible();
 });
 
 test("malformed route IDs cause zero API calls and an accessible invalid state", async ({ page }) => {
   let requests = 0;
   await page.route("**/public/**", async route => { requests += 1; await route.abort(); });
   await page.goto(`/trace/bad/${entityId}`);
-  await expect(page.getByRole("heading", { name: "This trace link is invalid" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check your Tracking ID" })).toBeVisible();
   expect(requests).toBe(0);
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations).toEqual([]);
@@ -167,8 +175,10 @@ test("untrusted long labels remain plain text and reflow at 320px", async ({ pag
   await page.setViewportSize({ width: 320, height: 720 });
   await page.route("**/public/**", async route => route.fulfill({ json: route.request().url().includes("/history") ? { ...history([]), entity: record } : record }));
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: label + " provenance", exact: true })).toBeVisible();
-  await expect(page.getByText("Unix seconds 18446744073709551615", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: label + " tracking", exact: true })).toBeVisible();
+  await expect(page.getByText("Date unavailable", { exact: true })).toBeVisible();
+  await page.getByText("Reference details", { exact: true }).click();
+  await expect(page.getByText("18446744073709551615", { exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   expect(await page.evaluate(() => Reflect.get(window, "__synthetic_injection"))).toBeUndefined();
   expect(await page.locator("[data-public-record] img").count()).toBe(0);
@@ -181,11 +191,11 @@ test("loading, API failure and unexpected document data never render private fie
     return route.fulfill({ json: { ...entity, metadata_document: { private: "SYNTHETIC_PRIVATE_SENTINEL" } } });
   });
   await page.goto(traceUrl);
-  await expect(page.getByRole("heading", { name: "Opening your trace" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Records are temporarily unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Finding your product" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product tracking is temporarily unavailable" })).toBeVisible();
   phase = "leak";
   await page.getByRole("button", { name: "Try again", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Records are temporarily unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product tracking is temporarily unavailable" })).toBeVisible();
   await expect(page.getByText("SYNTHETIC_PRIVATE_SENTINEL")).toHaveCount(0);
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
 });
@@ -198,8 +208,8 @@ test("lookup rejects malformed IDs and pasted URLs before any API request", asyn
   await page.goto("/");
   for (const value of ["bad", "0x" + "gg".repeat(32), "https://unapproved.example" + trackingUrl]) {
     await page.getByLabel("Tracking ID", { exact: true }).fill(value);
-    await page.getByRole("button", { name: "View public trace" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "Enter a complete Tracking ID" })).toContainText("0x followed by 64 hexadecimal characters");
+    await page.getByRole("button", { name: "Track product" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "That Tracking ID doesn't look complete" })).toContainText("Copy and paste the full ID provided with your product.");
     await expect(page).toHaveURL("http://127.0.0.1:4178/");
   }
   expect(externalRequests).toBe(0);
@@ -218,7 +228,7 @@ test("one Tracking ID opens the real gateway and supports accessible copying", a
   await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
   await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
   await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   await expect(page.locator(".timeline-event")).toHaveCount(4);
   expect(calls.map(call => call.path).sort()).toEqual([trackingApiPath, apiPath, apiPath + "/history"].sort());
   expect(calls.every(call => call.method === "GET" && !call.auth && !call.cookie)).toBe(true);
@@ -233,9 +243,10 @@ test("one Tracking ID opens the real gateway and supports accessible copying", a
 
 test("global tracking IDs distinguish the same Entity ID in two tenants", async ({ page }) => {
   await page.goto(trackingUrl);
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   await page.goto("/track/" + otherTrackingId);
-  await expect(page.getByRole("heading", { name: "Other tenant batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Second batch tracking" })).toBeVisible();
+  await page.getByText("Reference details", { exact: true }).click();
   await expect(page.getByText(otherTenantId, { exact: true })).toBeVisible();
 });
 
@@ -253,10 +264,10 @@ test("unknown or invalid Tracking IDs never query entity/history routes", async 
   const calls: string[] = [];
   page.on("request", request => { if (new URL(request.url()).pathname.startsWith("/public/")) calls.push(request.url()); });
   await page.goto("/track/bad");
-  await expect(page.getByRole("heading", { name: "This trace link is invalid" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Check your Tracking ID" })).toBeVisible();
   expect(calls).toHaveLength(0);
   await page.goto("/track/" + unknownId);
-  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();
   expect(calls).toHaveLength(1);
   expect(calls[0]).toContain("/public/v1/tracking/");
 });
@@ -271,10 +282,10 @@ test("single-ID refresh rechecks publication and clears a revoked mapping", asyn
     return route.fulfill({ json: path.endsWith("/history") ? history() : entity });
   });
   await page.goto(trackingUrl);
-  await expect(page.getByRole("heading", { name: "Batch provenance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   revoked = true;
-  await page.getByRole("button", { name: "Refresh record" }).click();
-  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await page.getByRole("button", { name: "Refresh" }).click();
+  await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
   expect(calls).toHaveLength(4);
   expect(calls.at(-1)).toBe(trackingApiPath);
@@ -283,7 +294,7 @@ test("single-ID refresh rechecks publication and clears a revoked mapping", asyn
 test("submitting an unknown Tracking ID opens the public unavailable state", async ({ page }) => {
   await page.goto("/");
   await page.getByLabel("Tracking ID", { exact: true }).fill(unknownId);
-  await page.getByRole("button", { name: "View public trace" }).click();
+  await page.getByRole("button", { name: "Track product" }).click();
   await expect(page).toHaveURL(new RegExp("/track/" + unknownId + "$"));
-  await expect(page.getByRole("heading", { name: "Public trace unavailable" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();
 });
