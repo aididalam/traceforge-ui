@@ -1,7 +1,7 @@
 import { createServer } from "node:http";
 import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath, shortApiPath, shortTracking, otherShortCode, richShortApiPath, richShortTracking } from "./fixtures.ts";
 
-import { operatorUser,operatorProducts,operatorBusinesses,operatorHistory,operatorOperations } from "./operator-fixtures.ts";
+import { operatorUser,operatorProduct,otherBusinessId,operatorProducts,operatorBusinesses,operatorHistory,operatorOperations } from "./operator-fixtures.ts";
 const syntheticSessions=new Set();
 let serial=0;
 const requests = [];
@@ -12,12 +12,13 @@ const server = createServer((request, reply) => {
   if (url.pathname === "/__requests") return send(200, requests);
   requests.push({ path: url.pathname, method: request.method, authorization: Boolean(request.headers.authorization), cookie: Boolean(request.headers.cookie) });
   if(url.pathname.startsWith("/operator/v1/")) {
-    if(url.pathname==="/operator/v1/login"||url.pathname==="/operator/v1/activate") {
+    if(url.pathname==="/operator/v1/login"||url.pathname==="/operator/v1/activate"||url.pathname==="/operator/v1/signup") {
       if(request.method!=="POST")return send(405,{});
       let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{
         let body;try{body=JSON.parse(data);}catch{return send(400,{});}
         if(body.email!=="operator@example.test"||body.password!=="Synthetic-Only-Password-2026")return send(401,{});
         if(url.pathname.endsWith("activate"))return send(200,{created:true});
+        if(url.pathname.endsWith("signup"))return send(200,{created:true,pending:false});
         const token="tfos_"+(String(++serial).padStart(43,"0"));syntheticSessions.add(token);
         return send(200,{sessionToken:token,expiresAt:new Date(Date.now()+30*60*1000).toISOString(),user:operatorUser});
       });return;
@@ -25,7 +26,16 @@ const server = createServer((request, reply) => {
     const token=(request.headers.authorization??"").replace(/^Bearer /,"");
     if(!syntheticSessions.has(token))return send(401,{});
     if(url.pathname==="/operator/v1/logout"&&request.method==="POST"){syntheticSessions.delete(token);return send(200,{signedOut:true});}
+    if(request.method==="POST"&&["/operator/v1/products/create",`/operator/v1/products/${operatorProduct.id}/receive`,`/operator/v1/products/${operatorProduct.id}/close`].includes(url.pathname)){
+      let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{
+        let body;try{body=JSON.parse(data);}catch{return send(400,{});}
+        if(!body.idempotencyKey)return send(400,{});
+        if(!url.pathname.endsWith("create")&&!body.confirmed)return send(400,{});
+        return send(200,{operationId:"12345678-1234-4234-8234-123456789abc",status:"CONFIRMED",transactionHash:"0x"+"55".repeat(32),blockNumber:"42",trackingId:operatorProduct.id});
+      });return;
+    }
     if(request.method!=="GET")return send(405,{});
+    if(url.pathname.startsWith("/operator/v1/receive/"))return send(200,{trackingId:operatorProduct.id,name:operatorProduct.name,holder:{id:otherBusinessId,name:"Demo Distributor"},closed:false,version:"1",canReceive:true});
     if(url.pathname==="/operator/v1/me")return send(200,{user:operatorUser});
     if(url.pathname==="/operator/v1/products")return send(200,operatorProducts);
     if(url.pathname==="/operator/v1/businesses")return send(200,operatorBusinesses);

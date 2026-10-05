@@ -29,7 +29,7 @@ export function makeEvents(count = 4): PublicEvent[] {
     blockNumber: String(12340 + index), transactionHash: hash, transactionIndex: 0, logIndex: index,
     eventType: index ? hash : null,
     // Include legacy platform labels that must be readable in the public UI.
-    eventTypeLabel: ["Entity created", "EntityMetadataRevised", "CustodyTransferAccepted", "GenericAPIRecordTraceProof"][index] ?? `Checkpoint ${index + 1}`,
+    eventTypeLabel: ["Entity created", "EntityMetadataRevised", "ProductReceived", "GenericAPIRecordTraceProof"][index] ?? `Checkpoint ${index + 1}`,
     stateAfter: hash, stateAfterLabel: index < 2 ? "Created" : "Quality approved",
     linkType: null, linkTypeLabel: null, metadataHash: hash, evidenceHash: index ? "0x" + "66".repeat(32) : null,
     occurredAt: String(1790000000 + index * 60), organization: null, transfer: null,
@@ -61,7 +61,7 @@ export const richShortApiPath = `/public/v1/short-links/${richShortCode}`;
 export const richShortTracking = { shortCode: richShortCode, trackingId: richTrackingId, tenantId, entityId: richEntityId };
 export function richHistory() {
   const events = makeEvents().map((event, index) => ({ ...event,
-    eventName: index === 2 ? "CustodyTransferred" : event.eventName,
+    eventName: index === 2 ? "CustodyClaimed" : event.eventName,
     organization: index < 2 ? producer : distributor,
     transfer: index === 2 ? { from: producer, to: distributor } : null,
   }));

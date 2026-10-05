@@ -202,3 +202,10 @@ summary { cursor: pointer; color: #4b6340; min-height: 32px; padding: 6px 0; fon
 @media(max-width:720px) { .operator-frame { grid-template-columns:1fr; } .operator-sidebar { position:static; } .operator-sidebar nav { display:flex; flex-wrap:wrap; margin:15px 0; } .operator-account { display:flex; flex-wrap:wrap; align-items:center; gap:10px; } .operator-account p { margin:0; } .operator-account .button { margin-left:auto; } .operator-auth { padding:25px; } .operator-auth .page-title,.operator-content .page-title { font-size:33px; } .operator-filters,.operator-product-summary { grid-template-columns:1fr; } .operator-panel { padding:22px; } }
 
 .header-links { display:flex; gap:20px; font-size:12px; } .header-links a { text-decoration:none; min-height:44px; display:flex; align-items:center; } @media(max-width:720px) { .header-links { gap:10px; font-size:10px; } }
+
+.operator-panel form { display: grid; gap: 1rem; margin-block: 1rem; }
+.operator-panel textarea { width: 100%; min-height: 6rem; font: inherit; padding: .8rem; border: 1px solid var(--border, #ccd2c8); border-radius: .3rem; }
+.operator-panel input[type="checkbox"] { width: auto; margin-right: .5rem; }
+.operator-panel .button, .operator-qr .button { margin-block: .6rem; margin-right: .7rem; }
+.operator-qr { background: white; border-radius: .4rem; padding: 1.5rem; overflow-wrap: anywhere; }
+.operator-qr canvas { max-width: 100%; height: auto; }

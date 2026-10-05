@@ -16,6 +16,38 @@ async function signIn(spy:ReturnType<typeof vi.fn<typeof fetch>>,previousCookie?
  return cookie.split(";")[0];
 }
 describe("operator gateway session boundary",()=>{
+ it("guards product mutations with exact origin, strict payloads, session credentials and matching tracking identity",async()=>{
+  const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy),id=operatorHistory.product.id;
+  const body={version:"1",confirmed:true,idempotencyKey:"synthetic-request-1234"};
+  spy.mockClear();
+  const csrf=new Request(origin+"/operator/api/products/"+id+"/receive",{method:"POST",headers:{Origin:"https://evil.example","Content-Type":"application/json",Cookie:cookie},body:JSON.stringify(body)});
+  expect((await operatorGateway(csrf,"receive",id)).status).toBe(403);
+  for(const invalid of [{...body,confirmed:false},{...body,organizationId:operatorUser.organizationId},{...body,version:"18446744073709551616"}])expect((await operatorGateway(request("receive",invalid,cookie),"receive",id)).status).toBe(400);
+  expect((await operatorGateway(request("close",{reason:"Sold",confirmed:true,idempotencyKey:"synthetic-request-1234"}),"close",id)).status).toBe(401);
+  expect(spy).not.toHaveBeenCalled();
+  const result={operationId:"12345678-1234-4234-8234-123456789def",status:"CONFIRMED",transactionHash:"0x"+"44".repeat(32),blockNumber:"12",trackingId:id};
+  spy.mockResolvedValue(response(result));
+  expect((await operatorGateway(request("receive",body,cookie),"receive",id)).status).toBe(200);
+  expect(spy.mock.calls.at(-1)?.[0]).toBe("https://api.example/operator/v1/products/"+id+"/receive");
+  expect(spy.mock.calls.at(-1)?.[1]?.body).toBe(JSON.stringify(body));
+  expect(spy.mock.calls.at(-1)?.[1]?.headers).toMatchObject({Authorization:"Bearer "+token});
+  for(const upstream of [{...result,trackingId:"0x"+"ff".repeat(32)},{...result,serializedTransaction:"PRIVATE_SENTINEL"}]){
+   spy.mockResolvedValue(response(upstream));const denied=await operatorGateway(request("receive",body,cookie),"receive",id);expect(denied.status).toBe(503);expect(await denied.text()).not.toContain("PRIVATE_SENTINEL");
+  }
+ });
+ it("supports independent signup without forwarding a session and validates scan preview identity",async()=>{
+  const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy);
+  const signup={...loginBody,name:"Operator",businessName:"Independent Business",businessType:"Distributor",publicProfile:true};
+  spy.mockResolvedValue(response({created:true,pending:false}));
+  expect((await operatorGateway(request("signup",signup,cookie),"signup")).status).toBe(200);
+  expect(spy.mock.calls.at(-1)?.[0]).toBe("https://api.example/operator/v1/signup");
+  expect(spy.mock.calls.at(-1)?.[1]?.headers).not.toHaveProperty("Authorization");
+  const id=operatorHistory.product.id,preview={trackingId:id,name:"Product",holder:{id:operatorUser.organizationId,name:"Business"},closed:false,version:"3",canReceive:true};
+  spy.mockResolvedValue(response(preview));
+  expect((await operatorGateway(request("lookup",undefined,cookie),"lookup",id)).status).toBe(200);
+  spy.mockResolvedValue(response({...preview,trackingId:"0x"+"ff".repeat(32)}));
+  expect((await operatorGateway(request("lookup",undefined,cookie),"lookup",id)).status).toBe(503);
+ });
  it("keeps upstream credentials on the server, rotates local sessions and forwards only fixed reads",async()=>{
   const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy);
   spy.mockResolvedValue(response(operatorProducts,200,{"Set-Cookie":"SYNTHETIC_PRIVATE_SENTINEL"}));

@@ -4,7 +4,7 @@ const id=z.string().regex(/^0x[0-9a-fA-F]{64}$/).transform(value=>value.toLowerC
 const uuid=z.string().uuid();
 const label=z.string().max(240).nullable();
 export const operatorUserSchema=z.strictObject({accountId:uuid,email:z.string().email().max(254),name:z.string().min(1).max(120),
-  tenantId:id,organizationId:id,workspaceName:label,organizationName:label,access:z.literal("read")});
+  tenantId:id,organizationId:id,workspaceName:label,organizationName:label,access:z.literal("manage")});
 export const operatorMeSchema=z.strictObject({user:operatorUserSchema});
 export const loginRequestSchema=z.strictObject({email:z.string().email().max(254),password:z.string().min(1).max(128)});
 export const activationRequestSchema=loginRequestSchema.extend({password:z.string().min(12).max(128),name:z.string().trim().min(1).max(120),invitationCode:z.string().regex(/^tfoi_[A-Za-z0-9_-]{43}$/)});
@@ -23,3 +23,13 @@ export type OperatorProduct=z.infer<typeof operatorProductSchema>;
 export type OperatorHistory=z.infer<typeof operatorHistorySchema>;
 export type OperatorBusinesses=z.infer<typeof operatorBusinessesSchema>;
 export type OperatorOperations=z.infer<typeof operatorOperationsSchema>;
+
+const key=z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
+export const signupRequestSchema=loginRequestSchema.extend({password:z.string().min(12).max(128),name:z.string().trim().min(1).max(120),
+ businessName:z.string().trim().min(1).max(120),businessType:z.enum(["Producer","Distributor","Transporter","Warehouse","Shop","Other business"]),publicProfile:z.boolean()});
+export const createProductRequestSchema=z.strictObject({name:z.string().trim().min(1).max(240),description:z.string().max(2000),publish:z.boolean(),idempotencyKey:key});
+export const receiveProductRequestSchema=z.strictObject({version:uint64,confirmed:z.literal(true),idempotencyKey:key});
+export const closeProductRequestSchema=z.strictObject({reason:z.enum(["Sold","Lost","Damaged","Disposed"]),confirmed:z.literal(true),idempotencyKey:key});
+export const businessWriteResultSchema=z.strictObject({operationId:uuid,status:z.enum(["PREPARED","BROADCAST","CONFIRMED","FAILED"]),transactionHash:id,blockNumber:uint64.nullable(),trackingId:id});
+export const receiveLookupSchema=z.strictObject({trackingId:id,name:label,holder:z.strictObject({id,name:label}),closed:z.boolean(),version:uint64,canReceive:z.boolean()});
+export type ReceiveLookup=z.infer<typeof receiveLookupSchema>;

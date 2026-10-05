@@ -22,7 +22,7 @@ test("product details and holder names precede dated supply history through the 
   await expect(events.first()).toContainText("Demo Producer");
   await expect(events.nth(2)).toContainText("Demo Producer");
   await expect(events.nth(2)).toContainText("Demo Distributor");
-  await expect(events.nth(2).getByRole("heading", { name: "Transfer accepted", exact: true })).toBeVisible();
+  await expect(events.nth(2).getByRole("heading", { name: "Product received", exact: true })).toBeVisible();
   for (let i = 0; i < 4; i += 1) {
     await expect(events.nth(i).locator("time")).toHaveAttribute("datetime", new Date(Number(richHistory().events[i].occurredAt) * 1000).toISOString());
     await expect(events.nth(i).locator("time")).toContainText("UTC");
@@ -88,7 +88,7 @@ test("production Next gateway shows only safe records without cookies or tokens"
   await expect(page.getByText("UPDATE 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product added", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product information updated", exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Transfer accepted", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Product received", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tracking update recorded", exact: true })).toBeVisible();
   await expect(page.getByText("Current status", { exact: true })).toBeVisible();
   await expect(page.getByText("Current holder", { exact: true })).toBeVisible();

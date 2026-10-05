@@ -9,7 +9,7 @@ This repository is the `ui/` submodule of
 See the parent repository for all components, architecture and setup.
 The separate UI repository is [traceforge-ui](https://github.com/aididalam/traceforge-ui).
 
-## Phase 1
+## Public product tracking
 
 - `/`: one Tracking ID input accepting a short code or a full hex ID.
 - `/s/:shortCode`: shareable 12-character product link, with copyable code/link;
@@ -26,8 +26,8 @@ The separate UI repository is [traceforge-ui](https://github.com/aididalam/trace
 - Responsive layout, semantic controls, keyboard focus, skip link and
   reduced-motion support. Automated axe checks cover core public states.
 
-QR generation/scanning and operator write screens are subsequent phases.
-Operator sign-in and read views are implemented below.
+The business dashboard implements signup, product creation, QR generation/scanning,
+receipt confirmation and holder-only close.
 Only explicitly published public API data is displayed. There is no production
 demo fallback: an unpublished or nonexistent entity stays unavailable.
 
@@ -68,7 +68,7 @@ before it can appear. Publication is an operator action, not part of UI startup.
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | Empty uses the app's fixed same-origin public GET handlers. An external HTTPS API origin requires its own explicit CORS policy. |
-| `NEXT_PUBLIC_SITE_ORIGIN` | Optional canonical HTTPS site origin reserved for future QR generation. Empty uses the current page origin. |
+| `NEXT_PUBLIC_SITE_ORIGIN` | Optional canonical HTTPS site origin for QR generation. Empty uses the current page origin. |
 | `TRACEFORGE_PUBLIC_API_ORIGIN` | Credential-free server API origin for the GET gateway. Required in production. Development defaults to `http://127.0.0.1:3000`. |
 
 All origins reject credentials, path prefixes, queries and fragments. Public
@@ -114,8 +114,7 @@ then uses the existing public detail/history endpoints: three initial GETs,
 the same as a full-ID lookup. Codes are case-insensitive on input and displayed
 in lowercase. The short page keeps the full Tracking ID in Reference details.
 Copy tracking link uses this page's origin and validated `/s/<code>` path.
-Refresh resolves again and hides unavailable/revoked records. Migration 007
-is prepared and temporarily verified; permanent activation is pending. See
+Refresh resolves again and hides unavailable/revoked records. Migration 007 is applied to the fresh local database. See
 [short-link design](https://github.com/aididalam/traceforge/blob/main/docs/public-short-links.md).
 
 The public tracking flow has no document/operator/write/RPC calls, SQL connections, private keys,
@@ -161,22 +160,31 @@ after Chromium is installed. Root CI installs Chromium and runs these checks
 with synthetic fixtures; no MySQL/Besu credentials are needed.
 
 The root project maintains `docs/roadmap.md` and `docs/ui-architecture.md` for
-the numbered delivery phases and future operator/QR boundaries.
+the delivery phases and public/operator boundaries.
 
 ## Business dashboard
 
-`/operator` opens the authenticated overview. `/operator/sign-in` provides email
-and password sign-in and an invitation-based account form. Product lists/search,
-current-holder filters, product details and dated history, workspace businesses,
-and your business's recorded operation statuses are available. Product updates,
-receiving/transferring, account administration and uploads remain later work.
+`/operator` opens the authenticated overview. `/operator/sign-in` supports
+independent business registration and email/password sign-in; staff invitations
+are optional. Product inventory and history span products your business created,
+currently holds or previously handled across producers.
+
+Businesses add products in their own production workspace, explicitly choose
+public sharing and download a QR. `/operator/receive` accepts a Tracking ID,
+short code, approved tracking URL or camera QR. Scanning only previews the
+product. Confirm physical receipt to immediately change its current holder;
+there is no sender proposal or receiving workspace role. Current holders close
+tracking with Sold, Lost, Damaged or Disposed. Closed products stay readable.
 
 This client is separate from public tracking. Its fixed `/operator/api/*`
 handlers call the API's `/operator/v1/*` routes. API session credentials stay in
 server memory; the browser gets an opaque HttpOnly, SameSite=Strict cookie
 (Secure and `__Host-` prefix on HTTPS). State-changing requests require the
 configured site's exact Origin. Responses and browser fetches use no-store.
-The API checks account, workspace and business membership on every read.
+The API checks active account and business identity on every read and restricts
+product/history access to products that business has handled. Production
+workspace roles protect creating and editing; receipt and close use global
+business identity, current holder and terminal-state checks.
 There is no unrestricted service credential or browser signing.
 
 | Server variable | Purpose |
@@ -191,10 +199,7 @@ multi-instance hosting. Sessions expire after 30 minutes; restored/hidden views
 revalidate and clear revoked records. No passwords, API credentials or private
 records are persisted in localStorage/sessionStorage.
 
-API migration 008 and initial operator invitations have **not been applied or
-created live** under the current temporary-write-only restriction. After separate
-activation, an administrator runs the API's `operator:invite` CLI, privately
-provides its owner-only invitation file to the intended user, and that user
-creates a password through this form. One account currently belongs to one
-workspace/business; email is unique. See the parent project's
-[operator dashboard and activation guide](https://github.com/aididalam/traceforge/blob/main/docs/operator-dashboard.md).
+API migrations 008–009 are applied locally. The API registers business wallets
+and production workspaces on chain; wallet keys remain in its owner-only server
+directory and never reach this app. See the parent project's
+[business dashboard guide](https://github.com/aididalam/traceforge/blob/main/docs/operator-dashboard.md).

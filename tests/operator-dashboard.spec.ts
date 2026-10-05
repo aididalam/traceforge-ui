@@ -1,5 +1,6 @@
 import { test,expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import jsQR from "jsqr";
 import { operatorUser,operatorProduct,operatorProducts,operatorBusinesses,operatorHistory,operatorOperations } from "./operator-fixtures";
 async function signIn(page:import("@playwright/test").Page){
  await page.goto("/operator/sign-in");await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
@@ -7,6 +8,47 @@ async function signIn(page:import("@playwright/test").Page){
  await expect(page.getByRole("heading",{name:"Business dashboard",exact:true})).toBeVisible();
  await expect(page.getByRole("link",{name:"Garden Tea Batch 001"})).toBeVisible();
 }
+test("a business registers independently without an invitation",async({page})=>{
+ await page.goto("/operator/sign-in");await page.getByRole("button",{name:"Register a business",exact:true}).click();
+ await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");
+ await page.getByLabel("Business name",{exact:true}).fill("Independent Distributor");
+ await page.getByLabel("Business type",{exact:true}).selectOption("Distributor");
+ await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
+ await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");
+ await expect(page.getByLabel("Invitation code",{exact:true})).toHaveCount(0);
+ await page.getByRole("button",{name:"Register business",exact:true}).click();
+ await expect(page.getByText("Your business account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
+ await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");
+ expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
+});
+test("receipt requires physical confirmation and uses a fixed authenticated write",async({page})=>{
+ await signIn(page);await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Receive a product",exact:true}).click();
+ await page.getByLabel("Tracking ID or product link",{exact:true}).fill(operatorProduct.id);
+ await page.getByRole("button",{name:"Find product",exact:true}).click();
+ const receive=page.getByRole("button",{name:"Receive into my inventory",exact:true});
+ await expect(receive).toBeDisabled();
+ await page.getByLabel("I have physically received this product",{exact:true}).check();
+ const sent=page.waitForRequest(request=>request.url().endsWith("/receive")&&request.method()==="POST");
+ await receive.click();const request=await sent;
+ expect(request.postDataJSON()).toMatchObject({version:"1",confirmed:true});expect(request.headers().authorization).toBeUndefined();
+ await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();
+ await expect(receive).toHaveCount(0);
+});
+test("a produced product has a decodable Tracking ID QR, and the holder can close it with a reason",async({page})=>{
+ await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("New Tea Pack");
+ await page.getByLabel("Product description",{exact:true}).fill("Product details for the printed tracking record.");
+ await page.getByRole("button",{name:"Add product",exact:true}).click();
+ const qr=page.getByRole("img",{name:"Product tracking QR code",exact:true});await expect(qr).toBeVisible();
+ const pixels=await qr.evaluate((element)=>{const canvas=element as HTMLCanvasElement;const image=canvas.getContext("2d")!.getImageData(0,0,canvas.width,canvas.height);return {width:image.width,height:image.height,data:Array.from(image.data)};});
+ expect(jsQR(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height)?.data).toBe("http://127.0.0.1:4178/track/"+operatorProduct.id);
+ await page.getByRole("link",{name:"Open product",exact:true}).click();
+ await page.getByLabel("Reason",{exact:true}).selectOption("Damaged");
+ const close=page.getByRole("button",{name:"Close tracking",exact:true});await expect(close).toBeDisabled();
+ await page.getByLabel("I confirm tracking should end for this product",{exact:true}).check();
+ const sent=page.waitForRequest(request=>request.url().endsWith("/close")&&request.method()==="POST");
+ await close.click();expect((await sent).postDataJSON()).toMatchObject({reason:"Damaged",confirmed:true});
+ await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();await expect(close).toBeDisabled();
+});
 test("business sign-in, products, filters and sign-out work through the real session gateway",async({page,context},testInfo)=>{
  const errors:string[]=[],calls:{path:string;auth:boolean;method:string}[]=[];
  page.on("pageerror",error=>errors.push(error.message));page.on("request",request=>{const path=new URL(request.url()).pathname;if(path.startsWith("/operator/api"))calls.push({path,auth:Boolean(request.headers().authorization),method:request.method()});});
