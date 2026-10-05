@@ -109,7 +109,7 @@ test("production Next gateway shows only safe records without cookies or tokens"
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: testInfo.outputPath("public-trace.png") });
   const upstream = await (await request.get("http://127.0.0.1:4202/__requests")).json();
-  expect(upstream.every((item: { method: string; authorization: boolean; cookie: boolean }) => item.method === "GET" && !item.authorization && !item.cookie)).toBe(true);
+  expect(upstream.filter((item: { path: string }) => item.path.startsWith("/public/")).every((item: { method: string; authorization: boolean; cookie: boolean }) => item.method === "GET" && !item.authorization && !item.cookie)).toBe(true);
 });
 
 test("gateway rejects POST and malformed IDs, with matching missing responses", async ({ request }) => {

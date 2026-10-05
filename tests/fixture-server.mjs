@@ -1,6 +1,9 @@
 import { createServer } from "node:http";
 import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath, shortApiPath, shortTracking, otherShortCode, richShortApiPath, richShortTracking } from "./fixtures.ts";
 
+import { operatorUser,operatorProducts,operatorBusinesses,operatorHistory,operatorOperations } from "./operator-fixtures.ts";
+const syntheticSessions=new Set();
+let serial=0;
 const requests = [];
 const server = createServer((request, reply) => {
   const url = new URL(request.url, "http://127.0.0.1:4202");
@@ -8,6 +11,28 @@ const server = createServer((request, reply) => {
   if (url.pathname === "/health") return send(200, { ready: true });
   if (url.pathname === "/__requests") return send(200, requests);
   requests.push({ path: url.pathname, method: request.method, authorization: Boolean(request.headers.authorization), cookie: Boolean(request.headers.cookie) });
+  if(url.pathname.startsWith("/operator/v1/")) {
+    if(url.pathname==="/operator/v1/login"||url.pathname==="/operator/v1/activate") {
+      if(request.method!=="POST")return send(405,{});
+      let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{
+        let body;try{body=JSON.parse(data);}catch{return send(400,{});}
+        if(body.email!=="operator@example.test"||body.password!=="Synthetic-Only-Password-2026")return send(401,{});
+        if(url.pathname.endsWith("activate"))return send(200,{created:true});
+        const token="tfos_"+(String(++serial).padStart(43,"0"));syntheticSessions.add(token);
+        return send(200,{sessionToken:token,expiresAt:new Date(Date.now()+30*60*1000).toISOString(),user:operatorUser});
+      });return;
+    }
+    const token=(request.headers.authorization??"").replace(/^Bearer /,"");
+    if(!syntheticSessions.has(token))return send(401,{});
+    if(url.pathname==="/operator/v1/logout"&&request.method==="POST"){syntheticSessions.delete(token);return send(200,{signedOut:true});}
+    if(request.method!=="GET")return send(405,{});
+    if(url.pathname==="/operator/v1/me")return send(200,{user:operatorUser});
+    if(url.pathname==="/operator/v1/products")return send(200,operatorProducts);
+    if(url.pathname==="/operator/v1/businesses")return send(200,operatorBusinesses);
+    if(url.pathname==="/operator/v1/operations")return send(200,operatorOperations);
+    if(url.pathname===`/operator/v1/products/${operatorHistory.product.id}/history`)return send(200,operatorHistory);
+    return send(404,{});
+  }
   if (request.method !== "GET") return send(405, { error: { code: "method_not_allowed" } });
   if (url.pathname === shortApiPath) return send(200, shortTracking);
   if (url.pathname === richShortApiPath) return send(200, richShortTracking);

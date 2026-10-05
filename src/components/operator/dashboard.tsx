@@ -1,0 +1,81 @@
+"use client";
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Heading, HashValue, RecordedTime, useRetryWait } from "../display";
+import { readableLabel } from "../../lib/display-labels";
+import { operatorClient, OperatorError } from "../../lib/operator-client";
+import { normalizeId } from "../../lib/urls";
+import type { OperatorUser,OperatorProduct,OperatorHistory,OperatorBusinesses,OperatorOperations } from "../../lib/operator-contract";
+
+type Section="overview"|"products"|"businesses"|"activity"|"product";
+type Data={user:OperatorUser;products:OperatorProduct[];next:string|null;businesses:OperatorBusinesses;operations:OperatorOperations;history:OperatorHistory|null};
+const friendly=(value:string|null,fallback:string)=>value?readableLabel(value):fallback;
+const operationNames:Record<string,string>={createEntity:"Product added",recordTrace:"Update recorded",updateEntityState:"Status changed",updateEntityMetadata:"Product information updated",createEntityLink:"Related product added",setEntityLinkActive:"Product connection updated",proposeCustodyTransfer:"Transfer requested",acceptCustodyTransfer:"Transfer accepted",closeEntity:"Tracking closed"};
+const operationStatuses:Record<string,string>={PREPARED:"Prepared",BROADCAST:"Awaiting confirmation",CONFIRMED:"Confirmed",FAILED:"Failed"};
+export function OperatorDashboard({section="overview",productId}:{section?:Section;productId?:string}){
+ const router=useRouter(),active=useRef<AbortController|null>(null),lock=useRef(false);
+ const [data,setData]=useState<Data|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState<OperatorError|null>(null),[version,setVersion]=useState(0),[paging,setPaging]=useState(false),[filter,setFilter]=useState("all"),[search,setSearch]=useState("");
+ const [signingOut,setSigningOut]=useState(false);
+ const wait=useRetryWait(error?.retryAt??0);
+ const refresh=useCallback(()=>{active.current?.abort();setData(null);setLoading(true);setVersion(value=>value+1);},[]);
+ const fail=useCallback((problem:unknown)=>{const issue=problem instanceof OperatorError?problem:new OperatorError("unavailable");setError(issue);if(issue.kind==="signedOut"){setData(null);router.replace("/operator/sign-in");}},[router]);
+ useEffect(()=>{
+  if(section==="product"&&(!productId||!normalizeId(productId))){setError(new OperatorError("invalid"));setLoading(false);return;}
+  const controller=new AbortController();active.current=controller;lock.current=false;setPaging(false);setData(null);setError(null);setLoading(true);
+  Promise.all([operatorClient.me(controller.signal),operatorClient.products("0",controller.signal),operatorClient.businesses(controller.signal),operatorClient.operations(controller.signal),
+   productId?operatorClient.history(productId,"0",controller.signal):Promise.resolve(null)])
+   .then(([me,products,businesses,operations,history])=>{if(!controller.signal.aborted){setData({user:me.user,products:products.products,next:products.page.next,businesses,operations,history});document.documentElement.classList.remove("operator-suspended");}})
+   .catch(problem=>{if(!controller.signal.aborted){fail(problem);document.documentElement.classList.remove("operator-suspended");}})
+   .finally(()=>{if(!controller.signal.aborted)setLoading(false);});
+  return()=>controller.abort();
+ },[section,productId,version,fail]);
+ useEffect(()=>{
+  const hide=()=>{document.documentElement.classList.add("operator-suspended");active.current?.abort();};
+  const restore=()=>{if(error&&error.retryAt>Date.now()){setData(null);setLoading(false);document.documentElement.classList.remove("operator-suspended");}else refresh();};
+  const visibility=()=>{if(document.visibilityState==="hidden")hide();else restore();};
+  const show=(event:PageTransitionEvent)=>{if(event.persisted)restore();};
+  document.addEventListener("visibilitychange",visibility);window.addEventListener("pagehide",hide);window.addEventListener("pageshow",show);
+  return()=>{document.removeEventListener("visibilitychange",visibility);window.removeEventListener("pagehide",hide);window.removeEventListener("pageshow",show);};
+ },[refresh,error]);
+ useEffect(()=>()=>document.documentElement.classList.remove("operator-suspended"),[]);
+ const more=async(history=false)=>{
+  if(!data||lock.current||wait>0)return;const controller=active.current;if(!controller||controller.signal.aborted)return;
+  const after=history?data.history?.page.next:data.next;if(!after)return;
+  lock.current=true;setPaging(true);setError(null);
+  try{if(history){const result=await operatorClient.history(productId!,after,controller.signal);if(!controller.signal.aborted)setData(previous=>previous?{...previous,history:{...result,events:[...previous.history!.events,...result.events.filter(event=>!previous.history!.events.some(old=>old.id===event.id))]}}:null);}
+   else{const result=await operatorClient.products(after,controller.signal);if(!controller.signal.aborted)setData(previous=>previous?{...previous,products:[...previous.products,...result.products.filter(product=>!previous.products.some(old=>old.id===product.id))],next:result.page.next}:null);}
+  }catch(problem){if(!controller.signal.aborted)fail(problem);}finally{lock.current=false;setPaging(false);}
+ };
+ const logout=async()=>{if(signingOut)return;setSigningOut(true);active.current?.abort();setData(null);
+  try{const result=await fetch("/operator/api/logout",{method:"POST",credentials:"same-origin",cache:"no-store",redirect:"error",signal:AbortSignal.timeout(10000)});if(!result.ok&&result.status!==401)throw Error();router.replace("/operator/sign-in");router.refresh();}
+  catch{setError(new OperatorError("unavailable"));setLoading(false);setSigningOut(false);}
+ };
+ const errorView=error&&<div className="inline-problem" role="alert"><h2>{error.kind==="missing"?"Product unavailable":error.kind==="invalid"?"Check this product link":error.kind==="rateLimited"?"Please wait a moment":"Dashboard temporarily unavailable"}</h2><p>{error.kind==="missing"?"This product could not be found in your workspace.":"We couldn't load this information. Try again shortly."}</p><button className="button secondary" onClick={refresh} disabled={wait>0}>{wait?`Try again in ${wait}s`:"Try again"}</button></div>;
+ if(!data)return <section className="operator-loading"><Heading>{loading?"Loading your dashboard…":"Business dashboard"}</Heading>{loading?<p role="status">Checking your account and loading products.</p>:errorView}<Link href="/operator/sign-in" prefetch={false}>Back to sign in</Link></section>;
+ const filtered=data.products.filter(product=>(filter!=="mine"||product.holder.id===data.user.organizationId)&&
+  (filter!=="open"||!product.closed)&&(filter!=="closed"||product.closed)&&
+  (!search||[product.name,product.status,product.holder.name,product.id].some(value=>value?.toLowerCase().includes(search.toLowerCase()))));
+ const businessName=(id:string|null)=>id?data.businesses.businesses.find(business=>business.id===id)?.name??"Business name unavailable":"Business not recorded";
+ const title=section==="product"?friendly(data.history?.product.name??null,"Product details"):section==="products"?"Products":section==="businesses"?"Businesses":section==="activity"?"Operation activity":"Business dashboard";
+ return <div className="operator-frame" data-operator-record>
+  <aside className="operator-sidebar panel"><span className="eyebrow">YOUR WORKSPACE</span><h2>{data.user.workspaceName??"Business workspace"}</h2><p>{data.user.organizationName??"Your business"}</p>
+   <nav aria-label="Business dashboard"><Link href="/operator" aria-current={section==="overview"?"page":undefined} prefetch={false}>Overview</Link><Link href="/operator/products" aria-current={section==="products"||section==="product"?"page":undefined} prefetch={false}>Products</Link><Link href="/operator/businesses" aria-current={section==="businesses"?"page":undefined} prefetch={false}>Businesses</Link><Link href="/operator/activity" aria-current={section==="activity"?"page":undefined} prefetch={false}>Operation activity</Link></nav>
+   <div className="operator-account"><strong>{data.user.name}</strong><p>{data.user.email}</p><button className="button secondary" onClick={logout} disabled={signingOut}>Sign out</button></div>
+  </aside>
+  <div className="operator-content"><div className="trace-heading"><div><span className="eyebrow">BUSINESS WORKSPACE</span><Heading>{title}</Heading><p>Products, businesses and recorded supply activity in your workspace.</p></div><button className="button secondary refresh" onClick={refresh} disabled={wait>0}>Refresh</button></div>
+   <div className="operator-notice">Viewing access: browse products, businesses and supply history.</div>{errorView}
+   {section==="overview"&&<div className="operator-stats"><div className="panel"><span>Products loaded</span><strong>{data.products.length}{data.next?"+":""}</strong></div><div className="panel"><span>Currently with your business</span><strong>{data.products.filter(product=>product.holder.id===data.user.organizationId).length}</strong></div><div className="panel"><span>Businesses shown</span><strong>{data.businesses.businesses.length}</strong></div></div>}
+   {(section==="overview"||section==="products")&&<section className="panel operator-panel" aria-label="Workspace products"><div className="operator-section-title"><h2>{section==="overview"?"Products in your workspace":"Product list"}</h2><span>{filtered.length} shown</span></div>
+    <div className="operator-filters"><label className="input-label">Find a product<input type="search" value={search} onChange={event=>setSearch(event.target.value)} placeholder="Product name, status or reference"/></label><label className="input-label">Show<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All products</option><option value="mine">With my business</option><option value="open">Tracking open</option><option value="closed">Tracking closed</option></select></label></div>
+    <p className="small-note">Search and filters apply to loaded products. Load more to include additional products.</p>
+    <div className="operator-product-list">{filtered.map(product=><Link className="operator-product-row" href={`/operator/products/${product.id}`} key={product.id} prefetch={false}><div><strong>{friendly(product.name,"Unnamed product")}</strong><span>{friendly(product.type,"Product")}</span></div><div><span>Current status</span><strong>{friendly(product.status,"Status name unavailable")}</strong><span>{product.closed?"Tracking closed":"Tracking open"}</span></div><div><span>Current holder</span><strong>{product.holder.name??"Business name unavailable"}</strong></div><span aria-hidden="true">↗</span></Link>)}</div>
+    {!filtered.length&&<p className="empty-history">No products match this view.</p>}{data.next&&<button className="button secondary" onClick={()=>void more()} disabled={paging||wait>0}>{paging?"Loading…":"Show more products"}</button>}
+   </section>}
+   {section==="businesses"&&<section className="panel operator-panel"><h2>Businesses in your workspace</h2><div className="operator-business-list">{data.businesses.businesses.map(business=><article key={business.id}><h3>{business.name??"Business name unavailable"}</h3><p>{friendly(business.type,"Business type unavailable")} · {business.active?"Active":"Inactive"}</p><details><summary>Business reference</summary><HashValue label="Business reference" value={business.id}/></details></article>)}</div>{!data.businesses.businesses.length&&<p>No businesses are recorded.</p>}{data.businesses.truncated&&<p>Showing the first 200 businesses.</p>}</section>}
+   {section==="activity"&&<section className="panel operator-panel"><h2>Your business's recent operations</h2><p className="small-note">Check progress here. Product history may take a moment to show a confirmed update.</p><div className="operator-operations">{data.operations.operations.map(operation=><article key={operation.id}><h3>{operationNames[operation.name]??readableLabel(operation.name)}</h3><span className="tag">{operationStatuses[operation.status]}</span><p><time dateTime={operation.updatedAt}>{new Intl.DateTimeFormat("en-GB",{dateStyle:"medium",timeStyle:"short",timeZone:"UTC"}).format(new Date(operation.updatedAt))} UTC</time></p><Link href={`/operator/products/${operation.productId}`} prefetch={false}>View product</Link><details><summary>Operation references</summary><HashValue label="Operation reference" value={operation.id}/><HashValue label="Transaction reference" value={operation.transactionHash}/></details></article>)}</div>{!data.operations.operations.length&&<p className="empty-history">No operations are recorded for your business.</p>}{data.operations.truncated&&<p>Showing the most recent 50 operations.</p>}</section>}
+   {section==="product"&&data.history&&<><section className="panel operator-panel"><h2>Product information</h2>{data.history.product.description&&<p>{data.history.product.description}</p>}<dl className="product-fields">{data.history.product.fields.map((field,index)=><div key={index}><dt>{field.label}</dt><dd>{readableLabel(field.value)}</dd></div>)}</dl><div className="operator-product-summary"><div><span>Current status</span><strong>{friendly(data.history.product.status,"Status name unavailable")}</strong></div><div><span>Current holder</span><strong>{data.history.product.holder.name??"Business name unavailable"}</strong></div><div><span>Added to tracking</span><RecordedTime value={data.history.product.createdAt}/></div></div><details><summary>Product reference</summary><HashValue label="Internal product reference" value={data.history.product.id}/></details></section>
+    <section className="panel operator-panel"><h2>Supply history</h2><p className="small-note">Recorded dates and businesses, in order. Times are in UTC.</p><ol className="operator-timeline">{data.history.events.map((event,index)=><li key={event.id}><span className="eyebrow">UPDATE {index+1}</span><h3>{friendly(event.label??event.name,"Product update")}</h3><RecordedTime value={event.occurredAt}/><p>{event.fromId||event.toId?`${businessName(event.fromId)} → ${businessName(event.toId)}`:businessName(event.organizationId)}</p><details><summary>Update references</summary><HashValue label="Update reference" value={event.id}/><HashValue label="Transaction reference" value={event.transactionHash}/></details></li>)}</ol>{!data.history.events.length&&<p>No updates are recorded yet.</p>}{data.history.page.next&&<button className="button secondary" onClick={()=>void more(true)} disabled={paging||wait>0}>{paging?"Loading…":"Show more updates"}</button>}</section></>}
+  </div>
+ </div>;
+}

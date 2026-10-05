@@ -26,7 +26,8 @@ The separate UI repository is [traceforge-ui](https://github.com/aididalam/trace
 - Responsive layout, semantic controls, keyboard focus, skip link and
   reduced-motion support. Automated axe checks cover core public states.
 
-QR generation/scanning and operator login/write screens are subsequent phases.
+QR generation/scanning and operator write screens are subsequent phases.
+Operator sign-in and read views are implemented below.
 Only explicitly published public API data is displayed. There is no production
 demo fallback: an unpublished or nonexistent entity stays unavailable.
 
@@ -74,7 +75,8 @@ All origins reject credentials, path prefixes, queries and fragments. Public
 configuration permits loopback HTTP in development only. The server upstream
 permits HTTP loopback for a colocated private API, and requires HTTPS otherwise.
 Public variables are embedded at build time; rebuild after changing them.
-Never put operator credentials in this app's environment or browser storage.
+Never put operator credentials in public environment variables or browser storage.
+Operator login credentials are handled only by the separate session gateway.
 
 Production build and local production server:
 
@@ -116,7 +118,7 @@ Refresh resolves again and hides unavailable/revoked records. Migration 007
 is prepared and temporarily verified; permanent activation is pending. See
 [short-link design](https://github.com/aididalam/traceforge/blob/main/docs/public-short-links.md).
 
-There are no document/operator/write/RPC calls, SQL connections, private keys,
+The public tracking flow has no document/operator/write/RPC calls, SQL connections, private keys,
 wallets, session/token storage, service workers or persistent provenance caches.
 Provenance is loaded in browser memory, never in a cached server-component
 payload. Entity publication does not make metadata/evidence documents public.
@@ -160,3 +162,39 @@ with synthetic fixtures; no MySQL/Besu credentials are needed.
 
 The root project maintains `docs/roadmap.md` and `docs/ui-architecture.md` for
 the numbered delivery phases and future operator/QR boundaries.
+
+## Business dashboard
+
+`/operator` opens the authenticated overview. `/operator/sign-in` provides email
+and password sign-in and an invitation-based account form. Product lists/search,
+current-holder filters, product details and dated history, workspace businesses,
+and your business's recorded operation statuses are available. Product updates,
+receiving/transferring, account administration and uploads remain later work.
+
+This client is separate from public tracking. Its fixed `/operator/api/*`
+handlers call the API's `/operator/v1/*` routes. API session credentials stay in
+server memory; the browser gets an opaque HttpOnly, SameSite=Strict cookie
+(Secure and `__Host-` prefix on HTTPS). State-changing requests require the
+configured site's exact Origin. Responses and browser fetches use no-store.
+The API checks account, workspace and business membership on every read.
+There is no unrestricted service credential or browser signing.
+
+| Server variable | Purpose |
+| --- | --- |
+| `TRACEFORGE_OPERATOR_API_ORIGIN` | Fixed credential-free API origin; required in production. Loopback HTTP is supported for a colocated API, HTTPS elsewhere. |
+| `TRACEFORGE_OPERATOR_SITE_ORIGIN` | Exact browser HTTPS origin for Origin/CSRF checks; local loopback HTTP is supported. Required for a deployed non-loopback site. |
+
+The session store currently supports a single Next Node process and at most
+1,000 active browser sessions. Restarting Next signs users out. A shared session
+store, HTTPS deployment and proxy rate-limit/load checks are required before
+multi-instance hosting. Sessions expire after 30 minutes; restored/hidden views
+revalidate and clear revoked records. No passwords, API credentials or private
+records are persisted in localStorage/sessionStorage.
+
+API migration 008 and initial operator invitations have **not been applied or
+created live** under the current temporary-write-only restriction. After separate
+activation, an administrator runs the API's `operator:invite` CLI, privately
+provides its owner-only invitation file to the intended user, and that user
+creates a password through this form. One account currently belongs to one
+workspace/business; email is unique. See the parent project's
+[operator dashboard and activation guide](https://github.com/aididalam/traceforge/blob/main/docs/operator-dashboard.md).

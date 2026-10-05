@@ -11,6 +11,6 @@ export default defineConfig({
   webServer: [
     { command: "node --experimental-strip-types tests/fixture-server.mjs", url: "http://127.0.0.1:4202/health", reuseExistingServer: false },
     { command: "npm run start -- --port 4178", url: "http://127.0.0.1:4178", reuseExistingServer: false,
-      env: { NEXT_TELEMETRY_DISABLED: "1", TRACEFORGE_BROADCAST_ENABLED: "false", TRACEFORGE_PUBLIC_API_ORIGIN: "http://127.0.0.1:4202" } },
+      env: { NEXT_TELEMETRY_DISABLED: "1", TRACEFORGE_BROADCAST_ENABLED: "false", TRACEFORGE_PUBLIC_API_ORIGIN: "http://127.0.0.1:4202", TRACEFORGE_OPERATOR_API_ORIGIN: "http://127.0.0.1:4202", TRACEFORGE_OPERATOR_SITE_ORIGIN: "http://127.0.0.1:4178" } },
   ],
 });
