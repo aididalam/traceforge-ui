@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId } from "./fixtures.ts";
+import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath } from "./fixtures.ts";
 
 const requests = [];
 const server = createServer((request, reply) => {
@@ -10,6 +10,9 @@ const server = createServer((request, reply) => {
   requests.push({ path: url.pathname, method: request.method, authorization: Boolean(request.headers.authorization), cookie: Boolean(request.headers.cookie) });
   if (request.method !== "GET") return send(405, { error: { code: "method_not_allowed" } });
   if (url.pathname === trackingApiPath) return send(200, tracking);
+  if (url.pathname === "/public/v1/tracking/" + richTrackingId) return send(200, { ...tracking, trackingId: richTrackingId, entityId: richEntityId });
+  if (url.pathname === richApiPath) return send(200, richEntity);
+  if (url.pathname === richApiPath + "/history") return send(200, richHistory());
   if (url.pathname === "/public/v1/tracking/" + otherTrackingId) return send(200, { ...tracking, trackingId: otherTrackingId, tenantId: otherTenantId });
   const otherPath = apiPath.replace(entity.tenantId, otherTenantId);
   const otherEntity = { ...entity, tenantId: otherTenantId, entityTypeLabel: "Second batch" };

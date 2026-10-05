@@ -1,6 +1,60 @@
 import { test, expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
-import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath, otherTrackingId, otherTenantId } from "./fixtures";
+import { apiPath, entity, entityId, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath, otherTrackingId, otherTenantId, richTrackingUrl, richEntity, richHistory, producer, distributor } from "./fixtures";
+
+test("product details and holder names precede dated supply history through the real gateway", async ({ page }, testInfo) => {
+  const errors: string[] = [];
+  page.on("pageerror", error => errors.push(error.message));
+  await page.goto(richTrackingUrl);
+  await expect(page.getByRole("heading", { name: "Garden Tea Batch 001", exact: true })).toBeVisible();
+  const information = page.getByRole("region", { name: "Product information", exact: true });
+  await expect(information).toContainText("GT-001");
+  await expect(information).toContainText("100");
+  await expect(information).toContainText("Packed");
+  await expect(information).toContainText("Approved");
+  await expect(information).toContainText("A shared description of this tea batch.");
+  const overview = page.getByRole("region", { name: "Current product overview" });
+  await expect(overview).toContainText("Demo Distributor");
+  await expect(overview).not.toContainText(/0x[0-9a-f]/i);
+  await expect(page.getByRole("heading", { name: "Supply history", exact: true })).toBeVisible();
+  const events = page.locator(".timeline-event");
+  await expect(events).toHaveCount(4);
+  await expect(events.first()).toContainText("Demo Producer");
+  await expect(events.nth(2)).toContainText("Demo Producer");
+  await expect(events.nth(2)).toContainText("Demo Distributor");
+  await expect(events.nth(2).getByRole("heading", { name: "Transfer accepted", exact: true })).toBeVisible();
+  for (let i = 0; i < 4; i += 1) {
+    await expect(events.nth(i).locator("time")).toHaveAttribute("datetime", new Date(Number(richHistory().events[i].occurredAt) * 1000).toISOString());
+    await expect(events.nth(i).locator("time")).toContainText("UTC");
+  }
+  expect(await page.evaluate(() => Boolean(document.querySelector(".product-information")!.compareDocumentPosition(document.querySelector(".journey")!) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+  await expect(events.nth(2).getByText(producer.id, { exact: true })).toBeHidden();
+  await events.nth(2).getByText("Update references", { exact: true }).click();
+  await expect(events.nth(2).getByText(producer.id, { exact: true })).toBeVisible();
+  // The receiving business also recorded the update, so its reference is present twice.
+  await expect(events.nth(2).getByText(distributor.id, { exact: true }).first()).toBeVisible();
+  expect((await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze()).violations).toEqual([]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  expect(errors).toEqual([]);
+  await page.screenshot({ path: testInfo.outputPath("product-and-supply-history.png"), fullPage: true });
+});
+
+test("shared details are plain text and missing names or dates never become hex summaries", async ({ page }) => {
+  const unsafeText = "<img src=x onerror=window.__synthetic_injection=1>";
+  const record = { ...entity, productInfo: { name: unsafeText + "A".repeat(150), description: unsafeText,
+    fields: [{ label: "Details", value: unsafeText + "B".repeat(900) }] } };
+  const events = makeEvents(1).map(event => ({ ...event, occurredAt: "18446744073709551615", organization: { id: producer.id, name: null, type: null } }));
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.route("**/public/**", async route => route.fulfill({ json: route.request().url().includes("/history") ? { ...history(events), entity: record } : record }));
+  await page.goto(traceUrl);
+  await expect(page.getByRole("heading", { name: record.productInfo.name, exact: true })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Current product overview" })).toContainText("Business name not shared");
+  await expect(page.locator(".timeline-event").first()).toContainText("Date unavailable");
+  await expect(page.locator(".timeline-event").first()).toContainText("Business name not shared");
+  expect(await page.locator("[data-public-record] img").count()).toBe(0);
+  expect(await page.evaluate(() => Reflect.get(window, "__synthetic_injection"))).toBeUndefined();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+});
 
 test("lookup offers only Tracking ID and supports keyboard entry", async ({ page }, testInfo) => {
   await page.goto("/");
@@ -29,7 +83,7 @@ test("production Next gateway shows only safe records without cookies or tokens"
   });
   await page.goto(traceUrl);
   await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Product history" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Supply history" })).toBeVisible();
   await expect(page.locator(".timeline-event")).toHaveCount(4);
   await expect(page.getByText("UPDATE 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product added", exact: true })).toBeVisible();

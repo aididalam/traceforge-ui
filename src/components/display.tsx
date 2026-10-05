@@ -74,3 +74,18 @@ export function displayDate(value: string): string {
   if (millis > 8640000000000000n) return "Date unavailable";
   return new Intl.DateTimeFormat("en", { dateStyle: "medium", timeZone: "UTC" }).format(new Date(Number(millis)));
 }
+
+export function recordedTime(value: string | null) {
+  if (value === null || !/^(0|[1-9][0-9]{0,19})$/.test(value)) return null;
+  const millis = BigInt(value) * 1000n;
+  if (millis > 8640000000000000n) return null;
+  const date = new Date(Number(millis));
+  return { iso: date.toISOString(), label: new Intl.DateTimeFormat("en-GB", {
+    dateStyle: "medium", timeStyle: "medium", timeZone: "UTC",
+  }).format(date) + " UTC" };
+}
+
+export function RecordedTime({ value }: { value: string | null }) {
+  const time = recordedTime(value);
+  return time ? <time dateTime={time.iso}>{time.label}</time> : <span>Date unavailable</span>;
+}

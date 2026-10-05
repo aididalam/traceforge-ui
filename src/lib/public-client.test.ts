@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPublicClient, PublicApiError, retryTime } from "./public-client";
 import { publicGateway, publicTrackingGateway } from "./public-gateway";
-import { maxCursor, validateHistory } from "./public-contract";
+import { maxCursor, validateHistory, publicEntitySchema } from "./public-contract";
+import { recordedTime } from "../components/display";
 import { parseTraceLink, publicOrigin, tracePath, trackingPath } from "./urls";
 import { apiPath, entity, entityId, hash, history, makeEvents, tenantId, traceUrl, unknownId, tracking, trackingId, trackingUrl, trackingApiPath } from "../../tests/fixtures";
 
@@ -29,6 +30,24 @@ describe("public URL boundary", () => {
 });
 
 describe("token-free client and public contract", () => {
+  it("validates shared details and dates without allowing document bodies or conflicting holder references", () => {
+    const holder = { id: entity.currentCustodian, name: "Demo business", type: "Distributor" };
+    expect(publicEntitySchema.parse({ ...entity, currentHolder: holder }).currentHolder).toEqual(holder);
+    for (const bad of [{ ...holder, id: unknownId }, { ...holder, document: { private: true } }]) {
+      expect(() => publicEntitySchema.parse({ ...entity, currentHolder: bad })).toThrow();
+    }
+    expect(() => publicEntitySchema.parse({ ...entity, productInfo: { name: "Product", description: null, fields: [], private: true } })).toThrow();
+    const old = { ...entity } as Record<string, unknown>;
+    delete old.currentHolder; delete old.productInfo;
+    expect(publicEntitySchema.parse(old)).toMatchObject({ currentHolder: null, productInfo: null });
+    expect(recordedTime("1790000000")?.iso).toBe(new Date(1790000000000).toISOString());
+    expect(recordedTime("1790000000")?.label).toContain("UTC");
+    expect(recordedTime("18446744073709551615")).toBeNull();
+    expect(recordedTime(null)).toBeNull();
+    expect(recordedTime("bad")).toBeNull();
+    const badEvent = { ...makeEvents()[0], occurredAt: 1790000000 };
+    expect(() => validateHistory({ ...history(), events: [badEvent] }, tenantId, entityId, 50, "0")).toThrow();
+  });
   it("resolves a single ID without credentials and validates identity/private fields", async () => {
     const spy = vi.fn<typeof fetch>().mockResolvedValue(response(tracking));
     const client = createPublicClient("", spy);

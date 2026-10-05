@@ -61,6 +61,18 @@ input::placeholder { color: #6c7568; }
 .breadcrumbs a { text-underline-offset: 3px; }
 .record-subtitle { font-size: 14px; margin: 0; }
 .refresh { white-space: nowrap; margin-top: 20px; }
+.product-information { padding: 27px 32px; margin-bottom: 24px; }
+.product-description { margin-top: 18px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.product-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 22px; margin: 25px 0 0; }
+.product-fields > div { min-width: 0; }
+.product-fields dt { color: #52604c; font-size: 12px; margin-bottom: 7px; overflow-wrap: anywhere; }
+.product-fields dd { margin: 0; font-size: 16px; font-weight: 500; white-space: pre-wrap; overflow-wrap: anywhere; }
+.event-date { color: #52604c; font-size: 11px; }
+.event-business { font-size: 13px; color: #465840; margin-top: -3px; margin-bottom: 14px; overflow-wrap: anywhere; }
+.event-business strong { font-weight: 600; }
+.transfer-business { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.overview .overview-date { font-size: 16px; line-height: 1.6; }
+@media (max-width: 720px) { .product-information { padding: 25px; } .product-fields { gap: 18px; } }
 .overview { display: grid; grid-template-columns: 1.1fr 1fr 1fr; background: var(--light-green); border: 1px solid #d3ddc6; border-radius: 11px; padding: 28px 32px; margin-bottom: 35px; }
 .overview > div { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; min-width: 0; padding-left: 28px; border-left: 1px solid #cbd7c0; }
 .overview > div:first-child { border: 0; padding: 0; }

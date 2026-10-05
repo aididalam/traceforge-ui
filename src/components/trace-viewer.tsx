@@ -2,20 +2,25 @@
 
 import Link from "next/link";
 import { useTrace } from "./use-trace";
-import { displayDate, HashValue, Heading, Problem, shortId, useRetryWait } from "./display";
+import { displayDate, HashValue, Heading, Problem, RecordedTime, useRetryWait } from "./display";
 import { PublicApiError } from "../lib/public-client";
 import { normalizeId } from "../lib/urls";
 import type { TraceTarget } from "../lib/urls";
-import type { PublicEvent } from "../lib/public-contract";
+import type { PublicEvent, PublicOrganization } from "../lib/public-contract";
 import { readableLabel } from "../lib/display-labels";
+
+const businessName = (organization: PublicOrganization | null) => organization?.name || "Business name not shared";
 
 function TimelineEvent({ event, position }: { event: PublicEvent; position: number }) {
   const title = readableLabel(event.eventTypeLabel || event.eventName);
   return <li className="timeline-event">
     <span className="timeline-dot" aria-hidden="true" />
     <article>
-      <div className="event-top"><span className="eyebrow">UPDATE {position}</span></div>
+      <div className="event-top"><span className="eyebrow">UPDATE {position}</span><span className="event-date"><RecordedTime value={event.occurredAt} /></span></div>
       <h3>{title}</h3>
+      {event.transfer ? <p className="event-business transfer-business">
+        <span>{businessName(event.transfer.from)}</span><span aria-hidden="true">→</span><span className="sr-only">to</span><span>{businessName(event.transfer.to)}</span>
+      </p> : event.organization && <p className="event-business">Recorded by <strong>{businessName(event.organization)}</strong></p>}
       <div className="event-tags">
         {event.stateAfterLabel && <span className="tag">{readableLabel(event.stateAfterLabel)}</span>}
         {event.linkTypeLabel && <span className="tag neutral">{readableLabel(event.linkTypeLabel)}</span>}
@@ -30,6 +35,10 @@ function TimelineEvent({ event, position }: { event: PublicEvent; position: numb
         {event.linkType && <HashValue label={`Connection type reference for update ${position}`} value={event.linkType} />}
         {event.metadataHash && <HashValue label={`Product information reference for update ${position}`} value={event.metadataHash} />}
         {event.evidenceHash && <HashValue label={`Supporting information reference for update ${position}`} value={event.evidenceHash} />}
+        {event.occurredAt && <HashValue label={`Recorded time reference for update ${position}`} value={event.occurredAt} />}
+        {event.organization && <HashValue label={`Business reference for update ${position}`} value={event.organization.id} />}
+        {event.transfer?.from && <HashValue label={`Sending business reference for update ${position}`} value={event.transfer.from.id} />}
+        {event.transfer?.to && <HashValue label={`Receiving business reference for update ${position}`} value={event.transfer.to.id} />}
       </details>
     </article>
   </li>;
@@ -49,23 +58,36 @@ function ValidTrace({ target }: { target: TraceTarget }) {
     <div className="trace-heading">
       <div><div className="breadcrumbs"><Link href="/" prefetch={false}>Track a product</Link><span aria-hidden="true">/</span><span>Product details</span></div>
         <span className="eyebrow">YOUR PRODUCT'S JOURNEY</span>
-        <Heading>{entity.entityTypeLabel ? `${readableLabel(entity.entityTypeLabel)} tracking` : "Product tracking"}</Heading>
+        <Heading>{entity.productInfo?.name || (entity.entityTypeLabel ? `${readableLabel(entity.entityTypeLabel)} tracking` : "Product tracking")}</Heading>
         <p className="record-subtitle">The latest recorded status and updates shared for this product.</p>
       </div>
       <button className="button secondary refresh" onClick={refresh}>↻ <span>Refresh</span></button>
     </div>
+    <section className="product-information panel" aria-labelledby="product-information-heading">
+      <div className="section-heading"><div><span className="eyebrow">ABOUT THIS PRODUCT</span><h2 id="product-information-heading">Product information</h2></div>
+        {entity.entityTypeLabel && <span className="tag neutral">{readableLabel(entity.entityTypeLabel)}</span>}
+      </div>
+      {entity.productInfo ? <>
+        {entity.productInfo.description && <p className="product-description">{entity.productInfo.description}</p>}
+        {entity.productInfo.fields.length > 0 && <dl className="product-fields">{entity.productInfo.fields.map(field => <div key={field.label}>
+          <dt>{field.label}</dt><dd>{field.value}</dd>
+        </div>)}</dl>}
+        {!entity.productInfo.description && !entity.productInfo.fields.length && <p className="section-description">No additional product details have been shared.</p>}
+      </> : <p className="section-description">Product details have not been shared yet.</p>}
+    </section>
     <section className="overview" aria-label="Current product overview">
       <div className="overview-status"><span className="field-label">Current status</span>
         <strong>{entity.currentStateLabel ? readableLabel(entity.currentStateLabel) : "Status name unavailable"}</strong>
         <span className={`status-pill ${entity.closed ? "closed" : ""}`}><span aria-hidden="true" />{entity.closed ? "Tracking closed" : "Tracking open"}</span>
       </div>
-      <div><span className="field-label">Current holder</span><strong className="mono">{shortId(entity.currentCustodian)}</strong><span className="small-note">Name not available; reference shown.</span></div>
-      <div><span className="field-label">Added to tracking</span><strong>{displayDate(entity.createdAt)}</strong><span className="small-note">Recorded date</span></div>
+      <div><span className="field-label">Current holder</span><strong>{businessName(entity.currentHolder)}</strong>
+        <span className="small-note">{entity.currentHolder?.type ? readableLabel(entity.currentHolder.type) : "Latest recorded holder"}</span></div>
+      <div><span className="field-label">Added to tracking</span><strong className="overview-date"><RecordedTime value={entity.createdAt} /></strong><span className="small-note">Recorded date and time</span></div>
     </section>
     <div className="trace-grid">
       <section className="journey panel" aria-labelledby="journey-heading">
-        <div className="section-heading"><div><span className="eyebrow">THE JOURNEY SO FAR</span><h2 id="journey-heading">Product history</h2></div><span className="count-pill">{events.length} updates shown</span></div>
-        <p className="section-description">Updates shared for this product, in the order they were recorded.</p>
+        <div className="section-heading"><div><span className="eyebrow">THE JOURNEY SO FAR</span><h2 id="journey-heading">Supply history</h2></div><span className="count-pill">{events.length} updates shown</span></div>
+        <p className="section-description">When each update happened and which businesses were involved, in recorded order. Times are shown in UTC.</p>
         {events.length ? <ol className="timeline">{events.map((event, index) => <TimelineEvent key={event.eventId} event={event} position={index + 1} />)}</ol> :
           <div className="empty-history"><h3>No updates yet</h3><p>The product is available to view, but no updates have been shared yet.</p></div>}
         {pageError && <Problem error={pageError} retry={loadMore} inline />}
@@ -93,7 +115,7 @@ function ValidTrace({ target }: { target: TraceTarget }) {
         </section>
         <section className="reading-note"><span className="note-icon" aria-hidden="true">i</span><h2>About this history</h2>
           <p>Only updates shared for everyone to see appear here. Other updates or related products may be kept private.</p>
-          <p>Supporting information is listed by reference. Its documents are not shown here. This page does not independently check the product or the accuracy of recorded claims.</p>
+          <p>Product details and business names appear when shared by the business. Other supporting documents remain available by reference. This page does not independently check the product or the accuracy of recorded claims.</p>
         </section>
       </aside>
     </div>

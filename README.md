@@ -110,6 +110,14 @@ Provenance is loaded in browser memory, never in a cached server-component
 payload. Entity publication does not make metadata/evidence documents public.
 Hashes and recorded claims do not independently verify physical authenticity.
 
+The main view presents separately shared product details, the current business
+name and dated supply history. Event dates come from recorded Unix seconds and
+include UTC; missing/out-of-range dates and missing names have plain-language
+fallbacks. IDs remain available in expandable references. Product/business
+display details are a reviewed API projection, not complete document bodies.
+They are suppressed when their indexed metadata references change. See the
+parent project's [public-details contract and activation](https://github.com/aididalam/traceforge/blob/main/docs/public-product-details.md).
+
 ## Verification
 
 ```bash
@@ -127,7 +135,8 @@ Chromium and a Pixel 7 Chromium profile against a production Next server on
 port 4178 plus an owned synthetic HTTP fixture server on port 4202. Tests
 cover real gateway round trips, keyboard/clipboard/axe behavior, pagination,
 revocation, visibility refresh, rate limits, invalid inputs and private-field
-rejection. They use no live API, DB rows, tokens, keys or blockchain writes.
+rejection, public product fields, business names, transfer participants and
+event dates. They use no live API, DB rows, tokens, keys or blockchain writes.
 Keep ports 4178 and 4202 free. Screenshots/traces are generated in ignored
 `test-results/`; servers shut down when the suite ends.
 
