@@ -150,6 +150,7 @@ summary { cursor: pointer; min-height: 40px; padding: 8px 0; color: var(--ink); 
 .operator-auth form, .auth-fields, .operator-panel form { display: grid; gap: 20px; }
 .auth-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
 .operator-auth form { margin-top: 24px; }
+.business-type-picker { font-size: 1rem; font-weight: 400; }
 .operator-auth-links { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 20px; margin: 20px 0; font-size: .875rem; }
 .operator-auth-links .btn-link { font-size: .875rem; }
 .operator-auth > .small-note { margin: 0; padding-top: 16px; border-top: 1px solid var(--line); }

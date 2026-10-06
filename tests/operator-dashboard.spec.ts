@@ -24,7 +24,8 @@ test("a business registers independently with its own type and no invitation",as
  await page.goto("/operator/sign-in");await page.getByRole("button",{name:"Register a business",exact:true}).click();
  await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");
  await page.getByLabel("Business name",{exact:true}).fill("Independent Distributor");
- await page.getByLabel("Business type",{exact:true}).fill("Customs broker & inspection");
+ await page.getByRole("combobox",{name:"Business type",exact:true}).fill("Customs broker & inspection");
+ await page.getByRole("option",{name:"Use “Customs broker & inspection”",exact:true}).click();
  await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
  await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");
  await expect(page.getByLabel("Invitation code",{exact:true})).toHaveCount(0);
@@ -152,13 +153,29 @@ test("gateway rejects CSRF, arbitrary targets, wrong methods and invalid identif
  expect((await request.post("/operator/api/products")).status()).toBe(405);
  expect((await request.get("/operator/api/login")).status()).toBe(405);
 });
-test("invitation activation leads to sign-in without persisting password or invitation",async({page})=>{
- await page.goto("/operator/sign-in");await page.getByRole("button",{name:"I have an invitation",exact:true}).click();
- await expect(page.getByRole("heading",{name:"Join your business",exact:true})).toBeVisible();
- await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
- await page.getByLabel("Invitation code",{exact:true}).fill("tfoi_"+"A".repeat(43));await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");
- await page.getByRole("button",{name:"Create account",exact:true}).click();await expect(page.getByText("Your account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
- await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");await expect(page.getByLabel("Invitation code",{exact:true})).toHaveCount(0);
+test("business type picker selects predefined values and requires a selection after clearing",async({page})=>{
+ await page.goto("/operator/sign-in");
+ await expect(page.getByRole("button",{name:"I have an invitation",exact:true})).toHaveCount(0);
+ await page.getByRole("button",{name:"Register a business",exact:true}).click();
+ await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");
+ await page.getByLabel("Business name",{exact:true}).fill("Independent Business");
+ await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
+ await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");
+ const picker=page.getByRole("combobox",{name:"Business type",exact:true});
+ await picker.fill("Distrib");
+ await expect(page.getByRole("option",{name:"Distributor",exact:true})).toBeVisible();
+ expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+ await page.getByRole("option",{name:"Distributor",exact:true}).click();
+ await picker.focus();await picker.press("Backspace");
+ let writes=0;page.on("request",request=>{if(request.url().endsWith("/signup")&&request.method()==="POST")writes++;});
+ await page.getByRole("button",{name:"Register business",exact:true}).click();expect(writes).toBe(0);
+ await picker.fill("Distributor");await picker.press("Enter");
+ const sent=page.waitForRequest(request=>request.url().endsWith("/signup")&&request.method()==="POST");
+ await page.getByRole("button",{name:"Register business",exact:true}).click();
+ expect((await sent).postDataJSON()).toMatchObject({businessType:"Distributor"});
+ await expect(page.getByText("Your business account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
+ await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");
+ await expect(page.getByRole("button",{name:"I have an invitation",exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
 });
 test("history pagination preserves exact large cursors",async({page})=>{

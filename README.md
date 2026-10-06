@@ -165,14 +165,15 @@ the delivery phases and public/operator boundaries.
 ## Business dashboard
 
 `/operator` opens the authenticated overview. `/operator/sign-in` supports
-independent business registration and email/password sign-in; staff invitations
-are optional. Product inventory and history span products your business created,
-currently holds or previously handled across producers.
+independent business registration and email/password sign-in. The form does not
+require or offer invitations. Product inventory and history span products your
+business created, currently holds or previously handled across producers.
 
-Business type is an editable text field (1–120 characters). Suggestions are
-optional; customs brokers, repair workshops, recyclers and other businesses
-can describe their work freely. The gateway and API both accept custom types
-and reject blank, oversized or invalid input. Business type is descriptive and
+Business type uses a searchable React Select Creatable picker. Choose a predefined
+type, or enter your own type (1–120 characters) and select “Use”. Custom types such
+as customs brokers, repair workshops and recyclers are supported. Selection is
+required, and clearing the picker requires choosing a type again. The gateway
+and API both accept custom types and reject blank, oversized or invalid input. Business type is descriptive and
 does not restrict receiving products from other registered businesses.
 
 Public tracking and dashboard pages use locally bundled Bootstrap 5.3.8 CSS,
