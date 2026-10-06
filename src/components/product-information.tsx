@@ -1,3 +1,4 @@
+import type { Quantity } from "../lib/product-contract";
 import { productDisplayName } from "../lib/display-labels";
 
 type ProductDetails = {
@@ -8,8 +9,10 @@ type ProductDetails = {
 
 // Render decoded, shared metadata as text. Older product descriptions remain
 // readable; new products use the same dynamic detail fields for any content.
-export function ProductMetadata({ product }: { product: ProductDetails }) {
+export function ProductMetadata({ product, quantity }: { product: ProductDetails; quantity?: Quantity }) {
   const entries = [
+    ...(quantity?.externalId ? [{ label: "Product / batch ID", value: quantity.externalId }] : []),
+    ...(quantity ? [{ label: "Originally registered", value: BigInt(quantity.initialQuantity).toLocaleString("en-US")+" item"+(quantity.initialQuantity==="1"?"":"s") }] : []),
     ...(product.name ? [{ label: "Product name", value: productDisplayName(product.name)! }] : []),
     ...(product.description ? [{ label: "Description", value: product.description }] : []),
     ...product.fields,

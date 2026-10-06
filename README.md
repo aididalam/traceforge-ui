@@ -11,7 +11,9 @@ The separate UI repository is [traceforge-ui](https://github.com/aididalam/trace
 
 ## Public product tracking
 
-- `/`: one Tracking ID input accepting a short code or a full hex ID.
+- `/`: one lookup input accepting a short/full Tracking ID or exact business
+  product/batch ID search, with optional originating-business code and bounded
+  duplicate-result selection.
 - `/s/:shortCode`: shareable 12-character product link, with copyable code/link;
   uses the same product details and supply history without redirecting.
 - `/track/:trackingId`: full single-ID product tracking; resolves the
@@ -27,7 +29,7 @@ The separate UI repository is [traceforge-ui](https://github.com/aididalam/trace
   reduced-motion support. Automated axe checks cover core public states.
 
 The business dashboard implements signup, product creation, QR generation/scanning,
-receipt confirmation and holder-only close.
+source selection, quantity receipt and owned-stock removal with a reason.
 Only explicitly published public API data is displayed. There is no production
 demo fallback: an unpublished or nonexistent entity stays unavailable.
 
@@ -96,6 +98,10 @@ handlers need a Next Node runtime.
 The browser uses only:
 
 ```text
+GET /public/v1/products/search?id=...&businessCode=...&after=0&limit=50
+GET /public/v1/products/:trackingId/quantity
+GET /public/v1/products/:trackingId/routes?after=0&limit=50
+GET /public/v1/products/:trackingId/holders?after=0x...&limit=50
 GET /public/v1/tracking/:trackingId
 GET /public/v1/short-links/:shortCode
 GET /public/v1/tenants/:tenantId/entities/:entityId
@@ -111,7 +117,9 @@ upstream error bodies and Set-Cookie headers never pass through the gateway.
 
 A short-code lookup resolves the global ID and internal pair in one request,
 then uses the existing public detail/history endpoints: three initial GETs,
-the same as a full-ID lookup. Codes are case-insensitive on input and displayed
+the same as a full-ID lookup for legacy records. Batch views add a bounded
+holder read; available receipt pages load after the user chooses to inspect them.
+Codes are case-insensitive on input and displayed
 in lowercase. The short page keeps the full Tracking ID in Reference details.
 Copy tracking link uses this page's origin and validated `/s/<code>` path.
 Refresh resolves again and hides unavailable/revoked records. Migration 007 is applied to the fresh local database. See
@@ -233,3 +241,29 @@ API migrations 008–009 are applied locally. The API registers business wallets
 and production workspaces on chain; wallet keys remain in its owner-only server
 directory and never reach this app. See the parent project's
 [business dashboard guide](https://github.com/aididalam/traceforge/blob/main/docs/operator-dashboard.md).
+
+
+## Batch UI addition — 2026-10-06
+
+The product form requires the business's product/batch ID, offers a Batch product
+checkbox and quantity, and preserves dynamic JSON details. Optional signup
+business codes appear in the profile and can be applied to printed references
+through an explicit suggestion. External-ID search handles duplicates; receipts
+select an exact available source and amount, while removal uses only owned
+stock and records Sold/Lost/Damaged/Spoiled/Disposed/Other with an explanation.
+Global, per-business and owned availability remain separate. Public tracking
+shows quantity totals, consented holders, available receipt paths and reasons.
+Pending writes reuse the same frozen payload/key; confirmed creation prints the
+returned short-code QR. Legacy whole-item records remain readable.
+
+The new fixed operator GET routes cover product search/routes/holders, and POST
+`/operator/api/products/:id/remove` handles versioned quantity removal. Public
+product routes remain token-free. All responses use strict allowlists and
+pagination checks. See the parent project's
+[Phase 4 implementation and evidence](https://github.com/aididalam/traceforge/blob/main/docs/batch-ui-phase4.md).
+
+43 unit tests and 104 desktop/mobile browser checks pass. Phase 5 assembled
+integration and Phase 6 deployment/migration are still pending; the running
+Pi services retain the previous whole-product deployment until activation.
+To verify alongside an existing UI server, set `TRACEFORGE_UI_DIST_DIR=.next-phase4`
+for both `npm run build` and `npm run test:e2e`; default builds use `.next`.

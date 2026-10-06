@@ -1,3 +1,4 @@
+import { routesSchema, holdersSchema, searchSchema, productQuery, validatePage, zeroHash } from "./product-contract";
 import { publicEntitySchema, publicTrackingSchema, publicShortLinkSchema, uint64, validateHistory } from "./public-contract";
 import { normalizeId, normalizeShortCode, publicOrigin } from "./urls";
 
@@ -55,7 +56,18 @@ export function createPublicClient(base = "", fetcher: typeof fetch = fetch, tim
     }
   }
 
+  async function productRead<K extends "routes"|"holders"|"search">(kind:K,id?:string,after="0",externalId?:string,code?:string,signal?:AbortSignal) {
+    if(kind!=="search"&&!normalizeId(id??""))throw new PublicApiError("invalid");
+    let args:ReturnType<typeof productQuery>;try{args=productQuery(new URLSearchParams({after,limit:"50",...(externalId?{id:externalId}:{}),...(code?{businessCode:code}:{})}),kind);}catch{throw new PublicApiError("invalid");}
+    const data=await read(`${origin}/public/v1/products/${kind==="search"?"search":normalizeId(id!)+"/"+kind}?${args.query}`,signal);
+    try{const result=(kind==="routes"?routesSchema:kind==="holders"?holdersSchema:searchSchema).parse(data);
+      return validatePage(result,args.after,args.limit,kind,args.externalId,args.code) as {routes:import("./product-contract").RoutePage;holders:import("./product-contract").HolderPage;search:import("./product-contract").SearchPage}[K];
+    }catch{throw new PublicApiError("unavailable");}
+  }
   return {
+    search:(externalId:string,code="",after="0",signal?:AbortSignal)=>productRead("search",undefined,after,externalId,code,signal),
+    routes:(id:string,after="0",signal?:AbortSignal)=>productRead("routes",id,after,undefined,undefined,signal),
+    holders:(id:string,after=zeroHash,signal?:AbortSignal)=>productRead("holders",id,after,undefined,undefined,signal),
     async shortLink(value: string, signal?: AbortSignal) {
       const shortCode = normalizeShortCode(value);
       if (!shortCode) throw new PublicApiError("invalid");

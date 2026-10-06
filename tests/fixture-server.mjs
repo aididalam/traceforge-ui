@@ -1,3 +1,4 @@
+import { batchId, batchCode, batchPreview, batchHistory, batchProduct, firstRoutePage, secondRoutePage, batchHolders, searchPage, batchPublic, batchPublicHistory, writeResult } from "./batch-fixtures.ts";
 import { createServer } from "node:http";
 import { apiPath, entity, history, tracking, trackingApiPath, otherTenantId, otherTrackingId, richTrackingId, richEntityId, richEntity, richHistory, richApiPath, shortApiPath, shortTracking, otherShortCode, richShortApiPath, richShortTracking } from "./fixtures.ts";
 
@@ -18,7 +19,7 @@ const server = createServer((request, reply) => {
         let body;try{body=JSON.parse(data);}catch{return send(400,{});}
         if(body.email!=="operator@example.test"||body.password!=="Synthetic-Only-Password-2026")return send(401,{});
         if(url.pathname.endsWith("activate"))return send(200,{created:true});
-        if(url.pathname.endsWith("signup"))return send(200,{created:true,pending:false});
+        if(url.pathname.endsWith("signup"))return send(200,{created:true,pending:false,businessCode:body.businessCode??"A"});
         const token="tfos_"+(String(++serial).padStart(43,"0"));syntheticSessions.add(token);
         return send(200,{sessionToken:token,expiresAt:new Date(Date.now()+30*60*1000).toISOString(),user:operatorUser});
       });return;
@@ -26,15 +27,27 @@ const server = createServer((request, reply) => {
     const token=(request.headers.authorization??"").replace(/^Bearer /,"");
     if(!syntheticSessions.has(token))return send(401,{});
     if(url.pathname==="/operator/v1/logout"&&request.method==="POST"){syntheticSessions.delete(token);return send(200,{signedOut:true});}
+    if(url.pathname===`/operator/v1/products/${batchId}/receive`||url.pathname===`/operator/v1/products/${batchId}/remove`){
+      let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{let body;try{body=JSON.parse(data);}catch{return send(400,{})}
+       if(!body.confirmed||!body.version||!body.idempotencyKey)return send(400,{});
+       if(url.pathname.endsWith("receive"))return send(200,{...writeResult,receivedRouteId:"0x"+"c1".repeat(32),quantity:String(body.quantity)});
+       return send(200,{...writeResult,removedQuantity:String(body.quantity),reason:body.reason,reasonText:body.reasonText});
+      });return;
+    }
     if(request.method==="POST"&&["/operator/v1/products/create",`/operator/v1/products/${operatorProduct.id}/receive`,`/operator/v1/products/${operatorProduct.id}/close`].includes(url.pathname)){
       let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{
         let body;try{body=JSON.parse(data);}catch{return send(400,{});}
         if(!body.idempotencyKey)return send(400,{});
         if(!url.pathname.endsWith("create")&&!body.confirmed)return send(400,{});
-        return send(200,{operationId:"12345678-1234-4234-8234-123456789abc",status:"CONFIRMED",transactionHash:"0x"+"55".repeat(32),blockNumber:"42",trackingId:operatorProduct.id});
+        return send(200,{operationId:"12345678-1234-4234-8234-123456789abc",status:"CONFIRMED",transactionHash:"0x"+"55".repeat(32),blockNumber:"42",trackingId:operatorProduct.id,...(url.pathname.endsWith("create")?{shortCode:"abc123xyz789"}:{})});
       });return;
     }
     if(request.method!=="GET")return send(405,{});
+    if(url.pathname===`/operator/v1/receive/${batchId}`||url.pathname===`/operator/v1/receive/${batchCode}`)return send(200,batchPreview);
+    if(url.pathname===`/operator/v1/products/${batchId}/history`)return send(200,batchHistory);
+    if(url.pathname===`/operator/v1/products/${batchId}/routes`)return send(200,url.searchParams.get("after")==="0"?firstRoutePage:secondRoutePage);
+    if(url.pathname===`/operator/v1/products/${batchId}/holders`)return send(200,batchHolders);
+    if(url.pathname==="/operator/v1/products/search")return send(200,{...searchPage,products:searchPage.products.filter(p=>p.externalId===url.searchParams.get("id")&&(!url.searchParams.get("businessCode")||p.origin.businessCode===url.searchParams.get("businessCode")))});
     if(url.pathname.startsWith("/operator/v1/receive/"))return send(200,{trackingId:operatorProduct.id,name:operatorProduct.name,holder:{id:otherBusinessId,name:"Demo Distributor"},closed:false,version:"1",canReceive:true});
     if(url.pathname==="/operator/v1/me")return send(200,{user:operatorUser});
     if(url.pathname==="/operator/v1/products")return send(200,operatorProducts);
@@ -44,6 +57,14 @@ const server = createServer((request, reply) => {
     return send(404,{});
   }
   if (request.method !== "GET") return send(405, { error: { code: "method_not_allowed" } });
+  if(url.pathname==="/public/v1/products/search")return send(200,{...searchPage,products:searchPage.products.filter(p=>p.externalId===url.searchParams.get("id")&&(!url.searchParams.get("businessCode")||p.origin.businessCode===url.searchParams.get("businessCode")))});
+  if(url.pathname===`/public/v1/products/${batchId}/holders`)return send(200,batchHolders);
+  if(url.pathname===`/public/v1/products/${batchId}/routes`)return send(200,url.searchParams.get("after")==="0"?firstRoutePage:secondRoutePage);
+  if(url.pathname===`/public/v1/products/${batchId}/quantity`)return send(200,batchPublic.quantity);
+  if(url.pathname===`/public/v1/short-links/${batchCode}`)return send(200,{shortCode:batchCode,trackingId:batchId,tenantId:batchPublic.tenantId,entityId:batchId});
+  if(url.pathname===`/public/v1/tracking/${batchId}`)return send(200,{trackingId:batchId,tenantId:batchPublic.tenantId,entityId:batchId});
+  if(url.pathname===`/public/v1/tenants/${batchPublic.tenantId}/entities/${batchId}`)return send(200,batchPublic);
+  if(url.pathname===`/public/v1/tenants/${batchPublic.tenantId}/entities/${batchId}/history`)return send(200,batchPublicHistory);
   if (url.pathname === shortApiPath) return send(200, shortTracking);
   if (url.pathname === richShortApiPath) return send(200, richShortTracking);
   if (url.pathname === "/public/v1/short-links/" + otherShortCode) return send(200, { ...tracking, shortCode: otherShortCode, trackingId: otherTrackingId, tenantId: otherTenantId });

@@ -27,7 +27,8 @@
       }
     ],
     "allowJs": true,
-    "incremental": true
+    "incremental": true,
+    "allowImportingTsExtensions": true
   },
   "include": [
     "next-env.d.ts",
@@ -37,7 +38,9 @@
     "vitest.config.ts",
     "playwright.config.ts",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-phase4/types/**/*.ts",
+    ".next-phase4/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

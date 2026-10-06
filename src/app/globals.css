@@ -251,3 +251,25 @@ body:has(.operator-frame) .site-footer { max-width: none; margin-left: 240px; }
   .operator-filters, .operator-product-summary, .product-detail-row { grid-template-columns: minmax(0,1fr); }
   .operator-panel { padding: 20px; } .product-detail-row .btn { justify-self: start; }
 }
+
+/* Quantity workflows use ordinary Bootstrap controls and readable receipt cards. */
+.action-row { display:flex; flex-wrap:wrap; align-items:center; gap:.75rem; margin:1rem 0; }
+.reference-lookup details { margin:.75rem 0; }
+.reference-lookup details .input-label { margin-top:1rem; }
+.reference-lookup .form-text { margin:.5rem 0 1rem; }
+.selection-list { list-style:none; padding:0; margin:1rem 0; display:grid; gap:1rem; }
+.selection-list li { border:1px solid var(--bs-border-color); border-radius:.375rem; padding:1rem; min-width:0; overflow-wrap:anywhere; }
+.selection-list li p { margin:.5rem 0; }
+.selection-list details { margin-top:.75rem; }
+.selection-list .form-check-label { font-weight:600; }
+.receipt-preview, .stock-summary, .stock-holders { margin:1.5rem 0; }
+.stock-summary { border-block:1px solid var(--bs-border-color); padding:1.25rem 0; }
+.stock-total { font-size:1.15rem; }
+.reason-totals { display:flex; flex-wrap:wrap; gap:1.5rem; }
+.reason-totals dt { font-weight:500; }
+.reason-totals dd { font-weight:600; margin:0; }
+.business-code-suggestion { border:1px solid var(--bs-border-color); border-radius:.375rem; padding:1rem; }
+.operator-panel fieldset { min-width:0; }
+.operator-panel fieldset legend { font-size:1rem; font-weight:600; }
+.reference-lookup input[type=number], .receipt-preview input[type=number] { max-width:24rem; }
+@media(max-width:575px) { .action-row > .btn { width:100%; } .selection-list li { padding:.75rem; } }

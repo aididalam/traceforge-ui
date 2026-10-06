@@ -1,9 +1,8 @@
 import { z } from "zod";
 
+import { uint64, publicQuantitySchema, publicMovementSchema } from "./product-contract";
+export { uint64 } from "./product-contract";
 export const maxCursor = 18446744073709551615n;
-const uint64Pattern = /^(0|[1-9][0-9]{0,19})$/;
-export const uint64 = z.string().regex(uint64Pattern)
-  .refine(value => uint64Pattern.test(value) && BigInt(value) <= maxCursor);
 const hash = z.string().regex(/^0x[0-9a-fA-F]{64}$/).transform(value => value.toLowerCase());
 const label = z.string().max(255).nullable();
 const organization = z.strictObject({ id: hash, name: label, type: label });
@@ -22,10 +21,12 @@ export const publicEntitySchema = z.strictObject({
   tenantId: hash, entityId: hash, entityType: hash, entityTypeLabel: label,
   metadataHash: hash, currentState: hash, currentStateLabel: label,
   currentCustodian: hash, closed: z.boolean(), createdAt: uint64, closedAt: uint64.nullable(),
+  quantity: publicQuantitySchema.optional(),
   productInfo: productInfo.nullable().default(null), currentHolder: organization.nullable().default(null),
 }).refine(entity => !entity.currentHolder || entity.currentHolder.id === entity.currentCustodian,
   "Current holder reference does not match the product.");
 export const publicEventSchema = z.strictObject({
+  quantity: publicMovementSchema.optional(),
   eventId: uint64, eventName: z.string().min(1).max(128), blockNumber: uint64,
   transactionHash: hash, transactionIndex: z.number().int().nonnegative(),
   logIndex: z.number().int().nonnegative(), eventType: hash.nullable(), eventTypeLabel: label,

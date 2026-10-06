@@ -7,6 +7,7 @@ for (const name of ["NEXT_PUBLIC_API_BASE_URL", "NEXT_PUBLIC_SITE_ORIGIN"] as co
 }
 
 const nextConfig: NextConfig = {
+  distDir: process.env.TRACEFORGE_UI_DIST_DIR || ".next",
   poweredByHeader: false,
   // Public data is loaded afresh in the browser, never in an RSC payload.
   async headers() {

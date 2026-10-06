@@ -15,8 +15,8 @@ test("one Tracking ID field accepts a short code and copies a safe short link", 
   });
   await page.goto("/");
   await expect(page.getByRole("textbox")).toHaveCount(1);
-  await page.getByLabel("Tracking ID", { exact: true }).fill(" " + richShortCode.toUpperCase() + " ");
-  await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).fill(" " + richShortCode.toUpperCase() + " ");
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).press("Enter");
   await expect(page).toHaveURL(new RegExp(richShortUrl + "$"));
   await expect(page.getByRole("heading", { name: "Garden Tea Batch 001", exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Current product overview" })).toContainText("Demo Distributor");

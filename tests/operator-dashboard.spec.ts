@@ -26,6 +26,7 @@ async function openAddProduct(page:import("@playwright/test").Page){
  await page.getByRole("link",{name:"Add product",exact:true}).click();
  await expect(page).toHaveURL(/\/operator\/products\/new$/);
  await expect(page.getByRole("heading",{name:"Add a product",exact:true})).toBeVisible();
+ await page.getByLabel("Product / batch ID",{exact:true}).fill("TEST-001");
  await showBusinessMenu(page);
  await expect(page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true})).toHaveAttribute("aria-current","page");
 }
@@ -45,13 +46,13 @@ test("a business registers independently with its own type and no invitation",as
  const sent=page.waitForRequest(request=>request.url().endsWith("/signup")&&request.method()==="POST");
  await page.getByRole("button",{name:"Register business",exact:true}).click();
  expect((await sent).postDataJSON()).toMatchObject({businessType:"Customs broker & inspection",publicProfile:true});
- await expect(page.getByText("Your business account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
+ await expect(page.getByText("Your business account is ready. Sign in with your email and password.")).toBeVisible();
  await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
 });
 test("receipt requires physical confirmation and uses a fixed authenticated write",async({page})=>{
  await signIn(page);await navigateBusiness(page,"Receive a product");
- await page.getByLabel("Tracking ID or product link",{exact:true}).fill(operatorProduct.id);
+ await page.getByLabel("Tracking ID or product / batch ID",{exact:true}).fill(operatorProduct.id);
  await page.getByRole("button",{name:"Find product",exact:true}).click();
  const receive=page.getByRole("button",{name:"Receive into my inventory",exact:true});
  await expect(receive).toBeDisabled();
@@ -71,7 +72,7 @@ test("a produced product has a decodable Tracking ID QR, and the holder can clos
  await page.getByRole("button",{name:"Add product",exact:true}).click();
  const qr=page.getByRole("img",{name:"Product tracking QR code",exact:true});await expect(qr).toBeVisible();
  const pixels=await qr.evaluate((element)=>{const canvas=element as HTMLCanvasElement;const image=canvas.getContext("2d")!.getImageData(0,0,canvas.width,canvas.height);return {width:image.width,height:image.height,data:Array.from(image.data)};});
- expect(jsQR(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height)?.data).toBe("http://127.0.0.1:4178/track/"+operatorProduct.id);
+ expect(jsQR(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height)?.data).toBe("http://127.0.0.1:4178/s/abc123xyz789");
  await page.getByRole("link",{name:"View product",exact:true}).click();
  await page.getByLabel("Reason",{exact:true}).selectOption("Damaged");
  const close=page.getByRole("button",{name:"Remove from supply chain",exact:true});await expect(close).toBeDisabled();
@@ -96,7 +97,7 @@ test("operators add and remove custom fields, save JSON and see exact values in 
  const sent=page.waitForRequest(request=>request.url().endsWith("/products/create")&&request.method()==="POST");
  await page.getByRole("button",{name:"Add product",exact:true}).click();
  const fields=[{label:"Batch number",value:"BATCH-2026-001"},{label:"Ingredients",value:"Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>"}];
- expect((await sent).postDataJSON()).toMatchObject({fields,publish:true,description:""});
+ expect((await sent).postDataJSON()).toMatchObject({fields,publish:true,id:"TEST-001",quantity:1});
  await page.route("**/operator/api/products/"+operatorProduct.id+"/history?*",route=>route.fulfill({json:{...operatorHistory,product:{...operatorProduct,fields}}}));
  await page.getByRole("link",{name:"View product",exact:true}).click();
  await expect(page.locator(".product-fields dt").filter({hasText:"Batch number"})).toBeVisible();
@@ -187,7 +188,7 @@ test("business type picker selects predefined values and requires a selection af
  const sent=page.waitForRequest(request=>request.url().endsWith("/signup")&&request.method()==="POST");
  await page.getByRole("button",{name:"Register business",exact:true}).click();
  expect((await sent).postDataJSON()).toMatchObject({businessType:"Distributor"});
- await expect(page.getByText("Your business account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
+ await expect(page.getByText("Your business account is ready. Sign in with your email and password.")).toBeVisible();
  await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");
  await expect(page.getByRole("button",{name:"I have an invitation",exact:true})).toHaveCount(0);
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);

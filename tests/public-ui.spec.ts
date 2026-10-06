@@ -61,7 +61,7 @@ test("lookup offers only Tracking ID and supports keyboard entry", async ({ page
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Every product has a journey." })).toBeVisible();
   await expect(page.getByRole("textbox")).toHaveCount(1);
-  await expect(page.getByLabel("Tracking ID", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Tracking ID or product / batch ID", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^(Tracking ID|Trace link|Entity IDs)$/ })).toHaveCount(0);
   await expect(page.getByLabel("Tenant ID", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Entity ID", { exact: true })).toHaveCount(0);
@@ -69,8 +69,8 @@ test("lookup offers only Tracking ID and supports keyboard entry", async ({ page
   const axe = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
   expect(axe.violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath("lookup.png") });
-  await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
-  await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).press("Enter");
   await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
   await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
 });
@@ -258,16 +258,16 @@ test("loading, API failure and unexpected document data never render private fie
   await expect(page.locator("[data-public-record]")).toHaveCount(0);
 });
 
-test("lookup rejects malformed IDs and pasted URLs before any API request", async ({ page }) => {
+test("lookup rejects malformed tracking IDs and unapproved URLs before any API request", async ({ page }) => {
   let externalRequests = 0;
   let apiRequests = 0;
   page.on("request", request => { if (new URL(request.url()).origin === "https://unapproved.example") externalRequests += 1; });
   await page.route("**/public/**", async route => { apiRequests += 1; await route.abort(); });
   await page.goto("/");
-  for (const value of ["bad", "0x" + "gg".repeat(32), "https://unapproved.example" + trackingUrl]) {
-    await page.getByLabel("Tracking ID", { exact: true }).fill(value);
+  for (const value of ["0x" + "gg".repeat(32), "https://unapproved.example" + trackingUrl]) {
+    await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).fill(value);
     await page.getByRole("button", { name: "Track product" }).click();
-    await expect(page.getByRole("alert").filter({ hasText: "That Tracking ID doesn't look complete" })).toContainText("Copy and paste the full ID provided with your product.");
+    await expect(page.getByRole("alert").filter({hasText:"Check the Tracking ID"})).toContainText("Check the Tracking ID or use a product link from this site.");
     await expect(page).toHaveURL("http://127.0.0.1:4178/");
   }
   expect(externalRequests).toBe(0);
@@ -283,8 +283,8 @@ test("one Tracking ID opens the real gateway and supports accessible copying", a
     if (path.startsWith("/public/")) calls.push({ path, method: request.method(), auth: Boolean(request.headers().authorization), cookie: Boolean(request.headers().cookie) });
   });
   await page.goto("/");
-  await page.getByLabel("Tracking ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
-  await page.getByLabel("Tracking ID", { exact: true }).press("Enter");
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).fill("0x" + trackingId.slice(2).toUpperCase());
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).press("Enter");
   await expect(page).toHaveURL(new RegExp(trackingUrl + "$"));
   await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   await expect(page.locator(".timeline-event")).toHaveCount(4);
@@ -351,7 +351,7 @@ test("single-ID refresh rechecks publication and clears a revoked mapping", asyn
 
 test("submitting an unknown Tracking ID opens the public unavailable state", async ({ page }) => {
   await page.goto("/");
-  await page.getByLabel("Tracking ID", { exact: true }).fill(unknownId);
+  await page.getByLabel("Tracking ID or product / batch ID", { exact: true }).fill(unknownId);
   await page.getByRole("button", { name: "Track product" }).click();
   await expect(page).toHaveURL(new RegExp("/track/" + unknownId + "$"));
   await expect(page.getByRole("heading", { name: "Product history unavailable" })).toBeVisible();

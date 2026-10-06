@@ -1,23 +1,13 @@
 "use client";
 
-import { useState } from "react";
-import type { FormEvent } from "react";
+import { ReferenceLookup } from "./reference-lookup";
+
 import { useRouter } from "next/navigation";
 import { Heading } from "./display";
 import { lookupPath } from "../lib/urls";
 
 export function Lookup() {
   const router = useRouter();
-  const [tracking, setTracking] = useState("");
-  const [error, setError] = useState("");
-  const submit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    try {
-      const path = lookupPath(tracking.trim());
-      setError("");
-      router.push(path);
-    } catch { setError("That Tracking ID doesn't look complete. Copy and paste the full ID provided with your product."); }
-  };
   return <div className="home-grid">
     <section className="home-intro"><span className="eyebrow">Follow your product</span>
       <Heading>Every product has a journey.</Heading>
@@ -28,13 +18,9 @@ export function Lookup() {
         <div><span className="feature-number">03 /</span><strong>Supporting information</strong><p>See which updates include supporting references.</p></div></div>
     </section>
     <section className="lookup-card panel" aria-labelledby="lookup-heading"><span className="eyebrow">Get started</span><h2 id="lookup-heading">Track a product</h2>
-      <p>Enter the Tracking ID from your product or packaging.</p>
-      <form onSubmit={submit}>
-        <label className="input-label">Tracking ID<input className="form-control" name="trackingId" value={tracking} onChange={event => setTracking(event.target.value)} required maxLength={66} placeholder="Paste your Tracking ID" autoComplete="off" spellCheck={false} aria-describedby={error ? "lookup-error" : "lookup-hint"}/></label>
-        <p id="lookup-hint" className="input-hint">Only information made available to everyone is shown here.</p>
-        {error && <p id="lookup-error" className="form-error" role="alert">{error}</p>}
-        <button className="btn btn-primary lookup-submit" type="submit">Track product <span aria-hidden="true">↗</span></button>
-      </form>
+      <p>Enter a tracking code or the product / batch ID printed on the packaging.</p>
+      <ReferenceLookup onSelect={id=>router.push(lookupPath(id))}/>
+      <p className="input-hint">Only information made available to everyone is shown here.</p>
       <div className="lookup-footnote"><span aria-hidden="true">◎</span><p>No account needed to track a product.</p></div>
     </section>
   </div>;

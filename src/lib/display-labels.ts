@@ -1,6 +1,9 @@
 // Translate known tracking terms for consumers. Custom business labels stay
 // plain text; spacing CamelCase names does not add claims or change API data.
 const familiarLabels: Record<string, string> = {
+  productregistered: "Product added",
+  batchreceived: "Items received",
+  quantityremoved: "Items removed",
   entity: "Product",
   entitycreated: "Product added",
   created: "Added to tracking",

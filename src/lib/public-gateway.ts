@@ -1,3 +1,4 @@
+import { publicQuantitySchema, routesSchema, holdersSchema, searchSchema, productQuery, validatePage } from "./product-contract";
 import { publicEntitySchema, publicTrackingSchema, publicShortLinkSchema, uint64, validateHistory } from "./public-contract";
 import { normalizeId, normalizeShortCode, publicOrigin } from "./urls";
 
@@ -69,4 +70,18 @@ export async function publicGateway(request: Request, params: { tenantId: string
     if (safe.tenantId !== tenantId || safe.entityId !== entityId) throw new Error("Mismatched entity.");
     return safe;
   });
+}
+
+export async function publicProductGateway(request:Request,value:string,kind:"quantity"|"routes"|"holders") {
+ const id=normalizeId(value);if(!id)return fail(400,"invalid_request","Invalid tracking lookup.");
+ if(kind==="quantity"){
+  if(new URL(request.url).search)return fail(400,"invalid_request","Invalid query.");
+  return readPublic(request,`/public/v1/products/${id}/quantity`,body=>publicQuantitySchema.parse(body));
+ }
+ let args:ReturnType<typeof productQuery>;try{args=productQuery(new URL(request.url).searchParams,kind);}catch{return fail(400,"invalid_request","Invalid pagination.");}
+ return readPublic(request,`/public/v1/products/${id}/${kind}?${args.query}`,body=>validatePage((kind==="routes"?routesSchema:holdersSchema).parse(body),args.after,args.limit,kind));
+}
+export async function publicSearchGateway(request:Request){
+ let args:ReturnType<typeof productQuery>;try{args=productQuery(new URL(request.url).searchParams,"search");}catch{return fail(400,"invalid_request","Invalid search.");}
+ return readPublic(request,`/public/v1/products/search?${args.query}`,body=>validatePage(searchSchema.parse(body),args.after,args.limit,"search",args.externalId,args.code));
 }
