@@ -8,6 +8,7 @@ import { operatorWrite, receiveLookup } from "../../lib/operator-client";
 import { normalizeId, normalizeShortCode, parseTraceLink, publicOrigin, trackingPath } from "../../lib/urls";
 import type { ReceiveLookup } from "../../lib/operator-contract";
 import { productFieldsSchema } from "../../lib/operator-contract";
+import { SupplyChainStatus } from "../product-information";
 
 function trackingInput(value:string) {
  const direct=normalizeId(value.trim())??normalizeShortCode(value.trim());
@@ -53,27 +54,26 @@ export function ReceiveProduct({initial=""}:{initial?:string}) {
   <form onSubmit={lookup}><label className="input-label">Tracking ID or product link<input className="form-control" value={input} onChange={event=>{setInput(event.target.value);setProduct(null);}} required maxLength={500} spellCheck={false}/></label><button className="btn btn-outline-secondary" disabled={busy}>Find product</button></form>
   <button className="btn btn-outline-secondary" type="button" onClick={()=>void scan()} disabled={busy||camera}>Scan QR with camera</button>
   {camera&&<><video ref={video} muted playsInline aria-label="QR scanner" style={{width:"100%",maxWidth:400}}/><button className="btn btn-outline-secondary" onClick={stop}>Stop camera</button></>}
-  {product&&<div><h3>{product.name??"Product"}</h3><p>Current holder: {product.holder.name??"Business name unavailable"}</p><p>{product.closed?"Tracking closed":product.canReceive?"Ready to receive":"Already with your business"}</p>
+  {product&&<div><h3>{product.name??"Product"}</h3><p>Current holder: {product.holder.name??"Business name unavailable"}</p><p><SupplyChainStatus closed={product.closed}/></p>{!product.closed&&<p>{product.canReceive?"Ready to receive":"Already with your business"}</p>}
    {product.canReceive&&<div className="receipt-actions"><div className="form-check"><input className="form-check-input" id="confirm-receipt" type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-receipt">I have physically received this product</label></div><button className="btn btn-primary" onClick={()=>void receive()} disabled={!confirmed||busy}>{busy?"Receiving…":"Receive into my inventory"}</button></div>}
    <Link href={`/operator/products/${product.trackingId}`} prefetch={false}>View product history</Link></div>}
   {notice&&<p role="status">{notice}</p>}
  </section>;
 }
 export function CreateProduct() {
- const [name,setName]=useState(""),[description,setDescription]=useState(""),[publish,setPublish]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[created,setCreated]=useState<string|null>(null);
+ const [name,setName]=useState(""),[publish,setPublish]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[created,setCreated]=useState<string|null>(null);
  const [fields,setFields]=useState<{id:string;label:string;value:string}[]>([]);
  const key=useRef<string|null>(null);
  const submit=async(event:FormEvent)=>{event.preventDefault();if(busy||created)return;
   const details=productFieldsSchema.safeParse(fields.map(({label,value})=>({label,value})));
   if(!details.success){setNotice("Give every additional field a unique name and a value. Up to 32 fields are supported.");return;}
   setBusy(true);setNotice("");key.current??=crypto.randomUUID();
-  try{const result=await operatorWrite("products/create",{name,description,fields:details.data,publish,idempotencyKey:key.current});setNotice(message(result.status));setCreated(result.trackingId);}
+  try{const result=await operatorWrite("products/create",{name,description:"",fields:details.data,publish,idempotencyKey:key.current});setNotice(message(result.status));setCreated(result.trackingId);}
   catch{setNotice("Product could not be confirmed. Check activity and retry with the same details.");}finally{setBusy(false);}};
  return <section className="panel operator-panel"><h2>Product information</h2><form onSubmit={submit}>
   <label className="input-label">Product name<input className="form-control" value={name} onChange={event=>setName(event.target.value)} required maxLength={240} disabled={busy||!!created}/></label>
-  <div className="input-label"><label htmlFor="product-description">Product description</label><textarea className="form-control" id="product-description" value={description} onChange={event=>setDescription(event.target.value)} maxLength={2000} disabled={busy||!!created}/></div>
-  <fieldset className="product-detail-editor" disabled={busy||!!created}><legend>Additional product details</legend>
-   <p>Add details such as batch number, size, ingredients or expiry date.</p>
+  <fieldset className="product-detail-editor" disabled={busy||!!created}><legend>Product details</legend>
+   <p>Add any details your product needs, such as description, batch number, size, ingredients or expiry date.</p>
    {fields.map((field,index)=><div className="product-detail-row" key={field.id}>
     <label className="input-label">Detail name {index+1}<input className="form-control" value={field.label} onChange={event=>setFields(current=>current.map(item=>item.id===field.id?{...item,label:event.target.value}:item))} required maxLength={80} placeholder="e.g. Batch number"/></label>
     <div className="input-label"><label htmlFor={`detail-value-${field.id}`}>Detail value {index+1}</label><textarea className="form-control" id={`detail-value-${field.id}`} rows={1} value={field.value} onChange={event=>setFields(current=>current.map(item=>item.id===field.id?{...item,value:event.target.value}:item))} required maxLength={1000} placeholder="e.g. BATCH-2026-001"/></div>
@@ -84,7 +84,7 @@ export function CreateProduct() {
   </fieldset>
   <div className="form-check"><input className="form-check-input" id="share-product" type="checkbox" checked={publish} onChange={event=>setPublish(event.target.checked)} disabled={busy||!!created}/><label className="form-check-label" htmlFor="share-product">Share this product&apos;s details and supply history publicly, including the additional fields</label></div>
   <button className="btn btn-primary" disabled={busy||!!created}>{busy?"Adding…":"Add product"}</button></form>
-  {notice&&<p role="status">{notice}</p>}{created&&<><Link href={`/operator/products/${created}`} prefetch={false}>Open product</Link><ProductQR trackingId={created}/><button className="btn btn-outline-secondary" onClick={()=>{setCreated(null);setName("");setDescription("");setFields([]);setPublish(false);key.current=null;setNotice("");}}>Add another product</button></>}
+  {notice&&<p role="status">{notice}</p>}{created&&<><Link href={`/operator/products/${created}`} prefetch={false}>View product</Link><ProductQR trackingId={created}/><button className="btn btn-outline-secondary" onClick={()=>{setCreated(null);setName("");setFields([]);setPublish(false);key.current=null;setNotice("");}}>Add another product</button></>}
  </section>;
 }
 export function ProductQR({trackingId}:{trackingId:string}) {
@@ -98,10 +98,10 @@ export function CloseProduct({trackingId}:{trackingId:string}) {
  const [reason,setReason]=useState("Sold"),[confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[closed,setClosed]=useState(false);const key=useRef<string|null>(null);
  const close=async()=>{if(!confirmed||busy)return;setBusy(true);key.current??=crypto.randomUUID();
   try{const result=await operatorWrite(`products/${trackingId}/close`,{reason,confirmed:true,idempotencyKey:key.current});setNotice(message(result.status));setClosed(result.status==="CONFIRMED");}
-  catch{setNotice("Close could not be confirmed. Check activity and refresh this product.");}finally{setBusy(false);}};
- return <section className="panel operator-panel"><h2>Close product tracking</h2><p>As its current holder, you can finish tracking. This is permanent.</p>
-  <div className="close-product-fields"><div className="input-label"><label htmlFor="close-reason">Reason</label><select className="form-select" id="close-reason" value={reason} onChange={event=>setReason(event.target.value)}>{["Sold","Lost","Damaged","Disposed"].map(value=><option key={value}>{value}</option>)}</select></div>
-  <div className="form-check"><input className="form-check-input" id="confirm-close" type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-close">I confirm tracking should end for this product</label></div>
-  <button className="btn btn-primary" onClick={()=>void close()} disabled={!confirmed||busy||closed}>{busy?"Closing…":"Close tracking"}</button></div>{notice&&<p role="status">{notice}</p>}
+  catch{setNotice("Removal could not be confirmed. Check activity and refresh this product.");}finally{setBusy(false);}};
+ return <section className="panel operator-panel"><h2>Remove from supply chain</h2><p>Only the current holder can remove this product. After removal, it cannot be received again. Its history remains available.</p>
+  <div className="close-product-fields"><div className="input-label"><label htmlFor="close-reason">Reason</label><select className="form-select" id="close-reason" value={reason} onChange={event=>setReason(event.target.value)}>{[["Sold","Delivered to customer"],["Lost","Lost"],["Damaged","Damaged"],["Disposed","Disposed"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></div>
+  <div className="form-check"><input className="form-check-input" id="confirm-close" type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-close">I confirm this product should leave the supply chain</label></div>
+  <button className="btn btn-primary" onClick={()=>void close()} disabled={!confirmed||busy||closed}>{busy?"Removing…":"Remove from supply chain"}</button></div>{notice&&<p role="status">{notice}</p>}
  </section>;
 }

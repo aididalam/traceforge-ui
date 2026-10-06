@@ -2,6 +2,14 @@ import { test,expect } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
 import jsQR from "jsqr";
 import { operatorUser,operatorProduct,operatorProducts,operatorBusinesses,operatorHistory,operatorOperations } from "./operator-fixtures";
+async function showBusinessMenu(page:import("@playwright/test").Page){
+ const toggle=page.getByRole("button",{name:"Show menu",exact:true});
+ if(await toggle.isVisible())await toggle.click();
+}
+async function navigateBusiness(page:import("@playwright/test").Page,label:string){
+ await showBusinessMenu(page);
+ await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:label,exact:true}).click();
+}
 async function signIn(page:import("@playwright/test").Page){
  await page.goto("/operator/sign-in");await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
  await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");await page.getByRole("button",{name:"Sign in",exact:true}).click();
@@ -12,12 +20,13 @@ async function openAddProduct(page:import("@playwright/test").Page){
  await signIn(page);
  await expect(page.locator(".operator-stats")).toBeVisible();
  await expect(page.getByLabel("Product name",{exact:true})).toHaveCount(0);
- await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true}).click();
+ await navigateBusiness(page,"Products");
  await expect(page.getByRole("heading",{name:"Products",exact:true})).toBeVisible();
  await expect(page.getByLabel("Product name",{exact:true})).toHaveCount(0);
  await page.getByRole("link",{name:"Add product",exact:true}).click();
  await expect(page).toHaveURL(/\/operator\/products\/new$/);
  await expect(page.getByRole("heading",{name:"Add a product",exact:true})).toBeVisible();
+ await showBusinessMenu(page);
  await expect(page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true})).toHaveAttribute("aria-current","page");
 }
 test("a business registers independently with its own type and no invitation",async({page},testInfo)=>{
@@ -41,7 +50,7 @@ test("a business registers independently with its own type and no invitation",as
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
 });
 test("receipt requires physical confirmation and uses a fixed authenticated write",async({page})=>{
- await signIn(page);await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Receive a product",exact:true}).click();
+ await signIn(page);await navigateBusiness(page,"Receive a product");
  await page.getByLabel("Tracking ID or product link",{exact:true}).fill(operatorProduct.id);
  await page.getByRole("button",{name:"Find product",exact:true}).click();
  const receive=page.getByRole("button",{name:"Receive into my inventory",exact:true});
@@ -55,15 +64,18 @@ test("receipt requires physical confirmation and uses a fixed authenticated writ
 });
 test("a produced product has a decodable Tracking ID QR, and the holder can close it with a reason",async({page})=>{
  await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("New Tea Pack");
- await page.getByLabel("Product description",{exact:true}).fill("Product details for the printed tracking record.");
+ await expect(page.locator("#product-description")).toHaveCount(0);
+ await page.getByRole("button",{name:"Add field",exact:true}).click();
+ await page.getByLabel("Detail name 1",{exact:true}).fill("Description");
+ await page.getByLabel("Detail value 1",{exact:true}).fill("Product details for the printed tracking record.");
  await page.getByRole("button",{name:"Add product",exact:true}).click();
  const qr=page.getByRole("img",{name:"Product tracking QR code",exact:true});await expect(qr).toBeVisible();
  const pixels=await qr.evaluate((element)=>{const canvas=element as HTMLCanvasElement;const image=canvas.getContext("2d")!.getImageData(0,0,canvas.width,canvas.height);return {width:image.width,height:image.height,data:Array.from(image.data)};});
  expect(jsQR(new Uint8ClampedArray(pixels.data),pixels.width,pixels.height)?.data).toBe("http://127.0.0.1:4178/track/"+operatorProduct.id);
- await page.getByRole("link",{name:"Open product",exact:true}).click();
+ await page.getByRole("link",{name:"View product",exact:true}).click();
  await page.getByLabel("Reason",{exact:true}).selectOption("Damaged");
- const close=page.getByRole("button",{name:"Close tracking",exact:true});await expect(close).toBeDisabled();
- await page.getByLabel("I confirm tracking should end for this product",{exact:true}).check();
+ const close=page.getByRole("button",{name:"Remove from supply chain",exact:true});await expect(close).toBeDisabled();
+ await page.getByLabel("I confirm this product should leave the supply chain",{exact:true}).check();
  const sent=page.waitForRequest(request=>request.url().endsWith("/close")&&request.method()==="POST");
  await close.click();expect((await sent).postDataJSON()).toMatchObject({reason:"Damaged",confirmed:true});
  await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();await expect(close).toBeDisabled();
@@ -84,9 +96,9 @@ test("operators add and remove custom fields, save JSON and see exact values in 
  const sent=page.waitForRequest(request=>request.url().endsWith("/products/create")&&request.method()==="POST");
  await page.getByRole("button",{name:"Add product",exact:true}).click();
  const fields=[{label:"Batch number",value:"BATCH-2026-001"},{label:"Ingredients",value:"Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>"}];
- expect((await sent).postDataJSON()).toMatchObject({fields,publish:true});
+ expect((await sent).postDataJSON()).toMatchObject({fields,publish:true,description:""});
  await page.route("**/operator/api/products/"+operatorProduct.id+"/history?*",route=>route.fulfill({json:{...operatorHistory,product:{...operatorProduct,fields}}}));
- await page.getByRole("link",{name:"Open product",exact:true}).click();
+ await page.getByRole("link",{name:"View product",exact:true}).click();
  await expect(page.locator(".product-fields dt").filter({hasText:"Batch number"})).toBeVisible();
  await expect(page.locator(".product-fields dd").filter({hasText:"BATCH-2026-001"})).toBeVisible();
  await expect(page.locator(".product-fields dd").filter({hasText:"500mL · বাংলাদেশ <b>plain text</b>"})).toBeVisible();
@@ -108,6 +120,8 @@ test("business sign-in, products, filters and sign-out work through the real ses
  page.on("pageerror",error=>errors.push(error.message));page.on("request",request=>{const path=new URL(request.url()).pathname;if(path.startsWith("/operator/api"))calls.push({path,auth:Boolean(request.headers().authorization),method:request.method()});});
  await signIn(page);
  await expect(page.getByText("Demo Supply Workspace",{exact:true})).toBeVisible();
+ await expect(page.locator(".operator-product-row .text-bg-success")).toHaveText("In supply chain");
+ await expect(page.locator(".operator-product-row .text-bg-info")).toHaveText("Out of supply chain");
  const cookies=await context.cookies();const session=cookies.find(cookie=>cookie.name==="tf_operator_dev")!;
  expect(session.httpOnly).toBe(true);expect(session.sameSite).toBe("Strict");expect(await page.evaluate(()=>document.cookie)).not.toContain("tf_operator_dev");
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
@@ -120,13 +134,13 @@ test("business sign-in, products, filters and sign-out work through the real ses
  expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);expect(errors).toEqual([]);
  await page.screenshot({path:testInfo.outputPath("business-dashboard.png"),fullPage:true});
- await page.getByRole("button",{name:"Sign out",exact:true}).click();await expect(page).toHaveURL(/\/operator\/sign-in$/);
+ await showBusinessMenu(page);await page.getByRole("button",{name:"Sign out",exact:true}).click();await expect(page).toHaveURL(/\/operator\/sign-in$/);
  await expect(page.locator("[data-operator-record]")).toHaveCount(0);expect((await context.cookies()).some(cookie=>cookie.name==="tf_operator_dev")).toBe(false);
 });
 test("businesses, operation status and named product supply history are readable",async({page})=>{
- await signIn(page);await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Businesses",exact:true}).click();
+ await signIn(page);await navigateBusiness(page,"Businesses");
  await expect(page.getByRole("heading",{name:"Demo Distributor",exact:true})).toBeVisible();
- await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Activity",exact:true}).click();
+ await navigateBusiness(page,"Activity");
  await expect(page.getByText("Confirmed",{exact:true})).toBeVisible();await expect(page.getByRole("heading",{name:"Update recorded",exact:true})).toBeVisible();
  await page.getByRole("link",{name:"View product",exact:true}).click();
  await expect(page.getByRole("heading",{name:operatorProduct.name,exact:true})).toBeVisible();
@@ -191,6 +205,42 @@ test("history pagination preserves exact large cursors",async({page})=>{
  await page.goto("/operator/products/"+operatorProduct.id);await expect(page.locator(".operator-timeline li")).toHaveCount(1);
  await page.getByRole("button",{name:"Show more updates",exact:true}).click();await expect(page.locator(".operator-timeline li")).toHaveCount(2);
  expect(cursors).toEqual(["0","9007199254741001"]);
+});
+
+test("product metadata and supply-chain labels use a responsive business sidebar",async({page},testInfo)=>{
+ const product={...operatorProduct,closed:true,status:"Sold"};
+ const events=[...operatorHistory.events,{...operatorHistory.events[0],id:"9007199254741003",name:"EntityClosed",label:"Sold · tracking closed"}];
+ await page.route("**/operator/api/**",route=>{
+  const path=new URL(route.request().url()).pathname;
+  return route.fulfill({json:path.endsWith("/me")?{user:{...operatorUser,workspaceName:operatorUser.organizationName}}:path.endsWith("/businesses")?operatorBusinesses:path.endsWith("/operations")?operatorOperations:path.endsWith("/history")?{...operatorHistory,product,events}:operatorProducts});
+ });
+ await page.goto("/operator/products/"+product.id);
+ await expect(page.getByRole("heading",{name:product.name,exact:true})).toBeVisible();
+ const sidebar=page.getByRole("complementary",{name:"Business sidebar",exact:true});
+ await expect(sidebar.getByText(operatorUser.organizationName,{exact:true})).toHaveCount(1);
+ const metadata=page.locator(".product-fields");
+ await expect(metadata.locator("dt").filter({hasText:/^Product name$/})).toBeVisible();
+ await expect(metadata.locator("dd").filter({hasText:product.name})).toBeVisible();
+ await expect(metadata.locator("dt").filter({hasText:/^Description$/})).toBeVisible();
+ await expect(metadata.locator("dd").filter({hasText:product.description})).toBeVisible();
+ await expect(page.locator(".operator-product-summary .text-bg-info")).toHaveText("Out of supply chain");
+ await expect(page.locator(".operator-timeline h3 .text-bg-info")).toHaveText("Out of supply chain");
+ await expect(page.locator(".operator-content")).not.toContainText(/\b(Open|Closed|Sold)\b/i);
+ if(testInfo.project.name==="mobile"){
+  await expect(sidebar.getByRole("navigation")).toBeHidden();
+  await sidebar.getByRole("button",{name:"Show menu",exact:true}).click();
+  await expect(sidebar.getByRole("navigation")).toBeVisible();
+  await expect(sidebar.getByRole("button",{name:"Hide menu",exact:true})).toHaveAttribute("aria-expanded","true");
+  await sidebar.getByRole("button",{name:"Hide menu",exact:true}).click();
+  await expect(sidebar.getByRole("navigation")).toBeHidden();
+ }else{
+  expect(await sidebar.evaluate(element=>getComputedStyle(element).position)).toBe("fixed");
+  expect((await sidebar.boundingBox())!.x).toBe(0);
+ }
+ await expect(page).toHaveTitle("TraceForge · Product details");
+ expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath("product-sidebar-and-metadata.png"),fullPage:true});
 });
 
 test("returning to a hidden dashboard revalidates access and respects a rate limit",async({page})=>{

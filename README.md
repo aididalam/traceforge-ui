@@ -186,17 +186,25 @@ Businesses add products in their own production workspace, explicitly choose
 public sharing and download a QR. `/operator/receive` accepts a Tracking ID,
 short code, approved tracking URL or camera QR. Scanning only previews the
 product. Confirm physical receipt to immediately change its current holder;
-there is no sender proposal or receiving workspace role. Current holders close
-tracking with Sold, Lost, Damaged or Disposed. Closed products stay readable.
+there is no sender proposal or receiving workspace role. Current holders remove
+products from the supply chain when delivered to a customer, lost, damaged or
+disposed. Removed products stay readable. Status badges use **In supply chain**
+(success) and **Out of supply chain** (info).
 
 Overview shows business statistics and product summaries. The Products page has
 an Add product link opening the separate `/operator/products/new` form.
+The business sidebar is fixed on desktop and collapses behind a menu button on
+mobile. Duplicate business/workspace names are shown once. Product information
+displays decoded metadata as labeled rows. Histories show each physical action
+once, while the API preserves all raw audit logs.
+
 The Add product form supports dynamic additional details: add/remove fields,
 choose each label and text value, and save them with the product as JSON. Up to
 32 unique fields are supported. Product details show the saved values exactly;
 public sharing explicitly includes the additional fields. Duplicate/blank names,
 blank values, unexpected properties and oversized input are rejected by both
-the gateway and API. Existing products remain compatible.
+the gateway and API. Add a Description field when needed; there is no separate
+description textarea. Existing product descriptions remain readable.
 
 This client is separate from public tracking. Its fixed `/operator/api/*`
 handlers call the API's `/operator/v1/*` routes. API session credentials stay in

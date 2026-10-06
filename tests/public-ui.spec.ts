@@ -15,6 +15,7 @@ test("product details and holder names precede dated supply history through the 
   await expect(information).toContainText("A shared description of this tea batch.");
   const overview = page.getByRole("region", { name: "Current product overview" });
   await expect(overview).toContainText("Demo Distributor");
+  await expect(overview.locator(".text-bg-success")).toHaveText("In supply chain");
   await expect(overview).not.toContainText(/0x[0-9a-f]/i);
   await expect(page.getByRole("heading", { name: "Supply history", exact: true })).toBeVisible();
   const events = page.locator(".timeline-event");
@@ -211,8 +212,8 @@ test("empty history and null labels are readable without inferred product data",
   await page.route("**/public/**", async route => route.fulfill({ json: route.request().url().includes("/history") ? { ...history([]), entity: unknown } : unknown }));
   await page.goto(traceUrl);
   await expect(page.getByRole("heading", { name: "Product tracking" })).toBeVisible();
-  await expect(page.getByText("Tracking closed", { exact: true })).toBeVisible();
-  await expect(page.getByText("Status name unavailable", { exact: true })).toBeVisible();
+  await expect(page.getByText("Out of supply chain", { exact: true })).toBeVisible();
+  await expect(page.locator(".overview-status .text-bg-info")).toBeVisible();
   await expect(page.getByRole("heading", { name: "No updates yet" })).toBeVisible();
 });
 

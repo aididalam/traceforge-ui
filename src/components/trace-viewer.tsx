@@ -8,21 +8,22 @@ import { normalizeId, normalizeShortCode, shortPath } from "../lib/urls";
 import type { TraceTarget } from "../lib/urls";
 import type { PublicEvent, PublicOrganization } from "../lib/public-contract";
 import { readableLabel } from "../lib/display-labels";
+import { ProductMetadata, SupplyChainStatus } from "./product-information";
 
 const businessName = (organization: PublicOrganization | null) => organization?.name || "Business name not shared";
 
 function TimelineEvent({ event, position }: { event: PublicEvent; position: number }) {
-  const title = readableLabel(event.eventTypeLabel || event.eventName);
+  const title = readableLabel(event.eventName === "EntityClosed" ? event.eventName : event.eventTypeLabel || event.eventName);
   return <li className="timeline-event">
     <span className="timeline-dot" aria-hidden="true" />
     <article>
       <div className="event-top"><span className="eyebrow">Update {position}</span><span className="event-date"><RecordedTime value={event.occurredAt} /></span></div>
-      <h3>{title}</h3>
+      <h3>{event.eventName === "EntityClosed" ? <SupplyChainStatus closed /> : title}</h3>
       {event.transfer ? <p className="event-business transfer-business">
         <span>{businessName(event.transfer.from)}</span><span aria-hidden="true">→</span><span className="sr-only">to</span><span>{businessName(event.transfer.to)}</span>
       </p> : event.organization && <p className="event-business">Recorded by <strong>{businessName(event.organization)}</strong></p>}
       <div className="event-tags">
-        {event.stateAfterLabel && <span className="tag">{readableLabel(event.stateAfterLabel)}</span>}
+        {event.stateAfterLabel && event.eventName !== "EntityClosed" && <span className="tag">{readableLabel(event.stateAfterLabel)}</span>}
         {event.linkTypeLabel && <span className="tag neutral">{readableLabel(event.linkTypeLabel)}</span>}
         {event.evidenceHash && <span className="evidence-label">Supporting information recorded</span>}
       </div>
@@ -67,18 +68,11 @@ function ValidTrace({ target }: { target: TraceTarget }) {
       <div className="section-heading"><div><span className="eyebrow">About this product</span><h2 id="product-information-heading">Product information</h2></div>
         {entity.entityTypeLabel && <span className="tag neutral">{readableLabel(entity.entityTypeLabel)}</span>}
       </div>
-      {entity.productInfo ? <>
-        {entity.productInfo.description && <p className="product-description">{entity.productInfo.description}</p>}
-        {entity.productInfo.fields.length > 0 && <dl className="product-fields">{entity.productInfo.fields.map(field => <div key={field.label}>
-          <dt>{field.label}</dt><dd>{field.value}</dd>
-        </div>)}</dl>}
-        {!entity.productInfo.description && !entity.productInfo.fields.length && <p className="section-description">No additional product details have been shared.</p>}
-      </> : <p className="section-description">Product details have not been shared yet.</p>}
+      {entity.productInfo ? <ProductMetadata product={entity.productInfo} /> : <p className="section-description">Product details have not been shared yet.</p>}
     </section>
     <section className="overview" aria-label="Current product overview">
       <div className="overview-status"><span className="field-label">Current status</span>
-        <strong>{entity.currentStateLabel ? readableLabel(entity.currentStateLabel) : "Status name unavailable"}</strong>
-        <span className={`status-pill ${entity.closed ? "closed" : ""}`}><span aria-hidden="true" />{entity.closed ? "Tracking closed" : "Tracking open"}</span>
+        <SupplyChainStatus closed={entity.closed} />
       </div>
       <div><span className="field-label">Current holder</span><strong>{businessName(entity.currentHolder)}</strong>
         <span className="small-note">{entity.currentHolder?.type ? entity.currentHolder.type : "Latest recorded holder"}</span></div>
@@ -113,8 +107,8 @@ function ValidTrace({ target }: { target: TraceTarget }) {
             <HashValue label="Status reference" value={entity.currentState} />
             <HashValue label="Product information reference" value={entity.metadataHash} />
             <HashValue label="Recorded time reference" value={entity.createdAt} />
-            {entity.closedAt && <><p className="small-note">Tracking closed on {displayDate(entity.closedAt)}.</p>
-              <HashValue label="Tracking closed time reference" value={entity.closedAt} /></>}
+            {entity.closedAt && <><p className="small-note">Left the supply chain on {displayDate(entity.closedAt)}.</p>
+              <HashValue label="Departure time reference" value={entity.closedAt} /></>}
           </details>
         </section>
         <section className="reading-note"><span className="note-icon" aria-hidden="true">i</span><h2>About this history</h2>
