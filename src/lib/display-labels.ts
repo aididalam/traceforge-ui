@@ -33,3 +33,11 @@ export function readableLabel(value: string): string {
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .replace(/([A-Z])([A-Z][a-z])/g, "$1 $2");
 }
+
+// These original demo names included a lifecycle note. Present the name on its
+// own; lifecycle belongs in the status badge. Preserve other product names and
+// the original hash-bound metadata, including names entered by real businesses.
+export function productDisplayName(value: string | null): string | null {
+  return value === "Demo Cola Bottle · sold" || value === "Demo Cola Bottle · open"
+    ? "Demo Cola Bottle" : value;
+}

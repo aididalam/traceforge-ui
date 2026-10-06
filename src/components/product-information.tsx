@@ -1,3 +1,5 @@
+import { productDisplayName } from "../lib/display-labels";
+
 type ProductDetails = {
   name: string | null;
   description: string | null;
@@ -8,7 +10,7 @@ type ProductDetails = {
 // readable; new products use the same dynamic detail fields for any content.
 export function ProductMetadata({ product }: { product: ProductDetails }) {
   const entries = [
-    ...(product.name ? [{ label: "Product name", value: product.name }] : []),
+    ...(product.name ? [{ label: "Product name", value: productDisplayName(product.name)! }] : []),
     ...(product.description ? [{ label: "Description", value: product.description }] : []),
     ...product.fields,
   ];

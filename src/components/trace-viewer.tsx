@@ -7,7 +7,7 @@ import { PublicApiError } from "../lib/public-client";
 import { normalizeId, normalizeShortCode, shortPath } from "../lib/urls";
 import type { TraceTarget } from "../lib/urls";
 import type { PublicEvent, PublicOrganization } from "../lib/public-contract";
-import { readableLabel } from "../lib/display-labels";
+import { readableLabel, productDisplayName } from "../lib/display-labels";
 import { ProductMetadata, SupplyChainStatus } from "./product-information";
 
 const businessName = (organization: PublicOrganization | null) => organization?.name || "Business name not shared";
@@ -59,7 +59,7 @@ function ValidTrace({ target }: { target: TraceTarget }) {
     <div className="trace-heading">
       <div><div className="breadcrumbs"><Link href="/" prefetch={false}>Track a product</Link><span aria-hidden="true">/</span><span>Product details</span></div>
         <span className="eyebrow">Your product’s journey</span>
-        <Heading>{entity.productInfo?.name || (entity.entityTypeLabel ? `${readableLabel(entity.entityTypeLabel)} tracking` : "Product tracking")}</Heading>
+        <Heading>{productDisplayName(entity.productInfo?.name ?? null) || (entity.entityTypeLabel ? `${readableLabel(entity.entityTypeLabel)} tracking` : "Product tracking")}</Heading>
         <p className="record-subtitle">The latest recorded status and updates shared for this product.</p>
       </div>
       <button className="btn btn-outline-secondary refresh" onClick={refresh}>↻ <span>Refresh</span></button>

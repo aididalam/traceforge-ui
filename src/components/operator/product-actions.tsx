@@ -9,6 +9,7 @@ import { normalizeId, normalizeShortCode, parseTraceLink, publicOrigin, tracking
 import type { ReceiveLookup } from "../../lib/operator-contract";
 import { productFieldsSchema } from "../../lib/operator-contract";
 import { SupplyChainStatus } from "../product-information";
+import { productDisplayName } from "../../lib/display-labels";
 
 function trackingInput(value:string) {
  const direct=normalizeId(value.trim())??normalizeShortCode(value.trim());
@@ -54,7 +55,7 @@ export function ReceiveProduct({initial=""}:{initial?:string}) {
   <form onSubmit={lookup}><label className="input-label">Tracking ID or product link<input className="form-control" value={input} onChange={event=>{setInput(event.target.value);setProduct(null);}} required maxLength={500} spellCheck={false}/></label><button className="btn btn-outline-secondary" disabled={busy}>Find product</button></form>
   <button className="btn btn-outline-secondary" type="button" onClick={()=>void scan()} disabled={busy||camera}>Scan QR with camera</button>
   {camera&&<><video ref={video} muted playsInline aria-label="QR scanner" style={{width:"100%",maxWidth:400}}/><button className="btn btn-outline-secondary" onClick={stop}>Stop camera</button></>}
-  {product&&<div><h3>{product.name??"Product"}</h3><p>Current holder: {product.holder.name??"Business name unavailable"}</p><p><SupplyChainStatus closed={product.closed}/></p>{!product.closed&&<p>{product.canReceive?"Ready to receive":"Already with your business"}</p>}
+  {product&&<div><h3>{productDisplayName(product.name)??"Product"}</h3><p>Current holder: {product.holder.name??"Business name unavailable"}</p><p><SupplyChainStatus closed={product.closed}/></p>{!product.closed&&<p>{product.canReceive?"Ready to receive":"Already with your business"}</p>}
    {product.canReceive&&<div className="receipt-actions"><div className="form-check"><input className="form-check-input" id="confirm-receipt" type="checkbox" checked={confirmed} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-receipt">I have physically received this product</label></div><button className="btn btn-primary" onClick={()=>void receive()} disabled={!confirmed||busy}>{busy?"Receiving…":"Receive into my inventory"}</button></div>}
    <Link href={`/operator/products/${product.trackingId}`} prefetch={false}>View product history</Link></div>}
   {notice&&<p role="status">{notice}</p>}
