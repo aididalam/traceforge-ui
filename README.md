@@ -262,8 +262,16 @@ product routes remain token-free. All responses use strict allowlists and
 pagination checks. See the parent project's
 [Phase 4 implementation and evidence](https://github.com/aididalam/traceforge/blob/main/docs/batch-ui-phase4.md).
 
-43 unit tests and 104 desktop/mobile browser checks pass. Phase 5 assembled
-integration and Phase 6 deployment/migration are still pending; the running
+43 unit tests and 104 desktop/mobile fixture checks pass. The additional
+[Phase 5 acceptance](https://github.com/aididalam/traceforge/blob/main/docs/batch-integration-phase5.md)
+uses real desktop/mobile browsers against a disposable contract, MySQL
+projection and API; it verifies complete single/batch flows, returns, reasons,
+private lookup and large-cursor history pagination. Run it through
+`TRACEFORGE_TEST_UI=true npm run test:direct-claim` in the parent API submodule
+after building contracts, indexer, API and UI and installing Chromium. The
+integration configuration uses `integration-results/`, separate from fixture
+artifacts, and requires the API runner's synthetic manifest. Phase 6
+deployment/migration remains pending; the running
 Pi services retain the previous whole-product deployment until activation.
 To verify alongside an existing UI server, set `TRACEFORGE_UI_DIST_DIR=.next-phase4`
 for both `npm run build` and `npm run test:e2e`; default builds use `.next`.

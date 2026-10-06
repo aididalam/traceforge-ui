@@ -1,9 +1,11 @@
 node_modules/
 .next/
 .next-phase4/
+.next-phase5/
 out/
 playwright-report/
 test-results/
+integration-results/
 .env
 .env.*
 !.env.example

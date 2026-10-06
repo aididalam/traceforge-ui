@@ -37,10 +37,13 @@
     "next.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
+    "playwright.integration.config.ts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     ".next-phase4/types/**/*.ts",
-    ".next-phase4/dev/types/**/*.ts"
+    ".next-phase4/dev/types/**/*.ts",
+    ".next-phase5/types/**/*.ts",
+    ".next-phase5/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"
