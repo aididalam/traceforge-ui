@@ -237,7 +237,7 @@ multi-instance hosting. Sessions expire after 30 minutes; restored/hidden views
 revalidate and clear revoked records. No passwords, API credentials or private
 records are persisted in localStorage/sessionStorage.
 
-API migrations 008–009 are applied locally. The API registers business wallets
+API migrations 001–010 are applied locally. The API registers business wallets
 and production workspaces on chain; wallet keys remain in its owner-only server
 directory and never reach this app. See the parent project's
 [business dashboard guide](https://github.com/aididalam/traceforge/blob/main/docs/operator-dashboard.md).
@@ -270,8 +270,16 @@ private lookup and large-cursor history pagination. Run it through
 `TRACEFORGE_TEST_UI=true npm run test:direct-claim` in the parent API submodule
 after building contracts, indexer, API and UI and installing Chromium. The
 integration configuration uses `integration-results/`, separate from fixture
-artifacts, and requires the API runner's synthetic manifest. Phase 6
-deployment/migration remains pending; the running
-Pi services retain the previous whole-product deployment until activation.
+artifacts, and requires the API runner's synthetic manifest.
+The [Phase 6 activation](https://github.com/aididalam/traceforge/blob/main/docs/batch-activation-phase6.md)
+now runs the quantity-aware API/UI against the new Pi contract. The local UI
+listens on port 3101 and the API on port 3000.
+`npm run verify:live-batch` performs read-only desktop/mobile acceptance against
+this unchanged seeded deployment, signing in with owner-only local demo
+credentials and leaving the single demo item available for manual receipt.
+It makes no product writes and saves screenshots/evidence under
+`/private/tmp/traceforge-phase6-ui/`. Override the loopback UI origin using
+`TRACEFORGE_LIVE_UI_ORIGIN` and the credentials path using
+`TRACEFORGE_DEMO_ACCOUNTS_FILE`; install Playwright Chromium first.
 To verify alongside an existing UI server, set `TRACEFORGE_UI_DIST_DIR=.next-phase4`
 for both `npm run build` and `npm run test:e2e`; default builds use `.next`.
