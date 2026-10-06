@@ -169,6 +169,18 @@ independent business registration and email/password sign-in; staff invitations
 are optional. Product inventory and history span products your business created,
 currently holds or previously handled across producers.
 
+Business type is an editable text field (1–120 characters). Suggestions are
+optional; customs brokers, repair workshops, recyclers and other businesses
+can describe their work freely. The gateway and API both accept custom types
+and reject blank, oversized or invalid input. Business type is descriptive and
+does not restrict receiving products from other registered businesses.
+
+Public tracking and dashboard pages use locally bundled Bootstrap 5.3.8 CSS,
+standard form controls, buttons and checkboxes. React handles interactions;
+Bootstrap JavaScript and CDN requests are not needed. The shared stylesheet
+uses a neutral palette, system font, visible focus indicators and readable
+labels across desktop and mobile.
+
 Businesses add products in their own production workspace, explicitly choose
 public sharing and download a QR. `/operator/receive` accepts a Tracking ID,
 short code, approved tracking URL or camera QR. Scanning only previews the

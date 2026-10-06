@@ -51,11 +51,15 @@ describe("operator gateway session boundary",()=>{
  });
  it("supports independent signup without forwarding a session and validates scan preview identity",async()=>{
   const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy);
-  const signup={...loginBody,name:"Operator",businessName:"Independent Business",businessType:"Distributor",publicProfile:true};
+  const signup={...loginBody,name:"Operator",businessName:"Independent Business",businessType:"Customs broker & inspection",publicProfile:true};
   spy.mockResolvedValue(response({created:true,pending:false}));
   expect((await operatorGateway(request("signup",signup,cookie),"signup")).status).toBe(200);
   expect(spy.mock.calls.at(-1)?.[0]).toBe("https://api.example/operator/v1/signup");
   expect(spy.mock.calls.at(-1)?.[1]?.headers).not.toHaveProperty("Authorization");
+  expect(JSON.parse(spy.mock.calls.at(-1)?.[1]?.body as string).businessType).toBe(signup.businessType);
+  const calls=spy.mock.calls.length;
+  for(const businessType of ["","  ","x".repeat(121),"Bad\nType",null,42])expect((await operatorGateway(request("signup",{...signup,businessType},cookie),"signup")).status).toBe(400);
+  expect(spy.mock.calls.length).toBe(calls);
   const id=operatorHistory.product.id,preview={trackingId:id,name:"Product",holder:{id:operatorUser.organizationId,name:"Business"},closed:false,version:"3",canReceive:true};
   spy.mockResolvedValue(response(preview));
   expect((await operatorGateway(request("lookup",undefined,cookie),"lookup",id)).status).toBe(200);

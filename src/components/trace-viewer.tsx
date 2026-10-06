@@ -16,7 +16,7 @@ function TimelineEvent({ event, position }: { event: PublicEvent; position: numb
   return <li className="timeline-event">
     <span className="timeline-dot" aria-hidden="true" />
     <article>
-      <div className="event-top"><span className="eyebrow">UPDATE {position}</span><span className="event-date"><RecordedTime value={event.occurredAt} /></span></div>
+      <div className="event-top"><span className="eyebrow">Update {position}</span><span className="event-date"><RecordedTime value={event.occurredAt} /></span></div>
       <h3>{title}</h3>
       {event.transfer ? <p className="event-business transfer-business">
         <span>{businessName(event.transfer.from)}</span><span aria-hidden="true">→</span><span className="sr-only">to</span><span>{businessName(event.transfer.to)}</span>
@@ -49,7 +49,7 @@ function ValidTrace({ target }: { target: TraceTarget }) {
   const wait = useRetryWait(pageError?.retryAt ?? 0);
   if (state.kind === "failed") return <Problem error={state.error} retry={refresh} />;
   if (state.kind === "loading") return <section className="loading-card" aria-busy="true" role="status">
-    <span className="eyebrow">PRODUCT TRACKING</span><Heading>Finding your product</Heading>
+    <span className="eyebrow">Product tracking</span><Heading>Finding your product</Heading>
     <p>Checking the latest recorded status and shared history.</p>
     <div className="skeleton wide" /><div className="skeleton" /><div className="skeleton short" />
   </section>;
@@ -57,14 +57,14 @@ function ValidTrace({ target }: { target: TraceTarget }) {
   return <div data-public-record>
     <div className="trace-heading">
       <div><div className="breadcrumbs"><Link href="/" prefetch={false}>Track a product</Link><span aria-hidden="true">/</span><span>Product details</span></div>
-        <span className="eyebrow">YOUR PRODUCT'S JOURNEY</span>
+        <span className="eyebrow">Your product’s journey</span>
         <Heading>{entity.productInfo?.name || (entity.entityTypeLabel ? `${readableLabel(entity.entityTypeLabel)} tracking` : "Product tracking")}</Heading>
         <p className="record-subtitle">The latest recorded status and updates shared for this product.</p>
       </div>
-      <button className="button secondary refresh" onClick={refresh}>↻ <span>Refresh</span></button>
+      <button className="btn btn-outline-secondary refresh" onClick={refresh}>↻ <span>Refresh</span></button>
     </div>
     <section className="product-information panel" aria-labelledby="product-information-heading">
-      <div className="section-heading"><div><span className="eyebrow">ABOUT THIS PRODUCT</span><h2 id="product-information-heading">Product information</h2></div>
+      <div className="section-heading"><div><span className="eyebrow">About this product</span><h2 id="product-information-heading">Product information</h2></div>
         {entity.entityTypeLabel && <span className="tag neutral">{readableLabel(entity.entityTypeLabel)}</span>}
       </div>
       {entity.productInfo ? <>
@@ -81,24 +81,24 @@ function ValidTrace({ target }: { target: TraceTarget }) {
         <span className={`status-pill ${entity.closed ? "closed" : ""}`}><span aria-hidden="true" />{entity.closed ? "Tracking closed" : "Tracking open"}</span>
       </div>
       <div><span className="field-label">Current holder</span><strong>{businessName(entity.currentHolder)}</strong>
-        <span className="small-note">{entity.currentHolder?.type ? readableLabel(entity.currentHolder.type) : "Latest recorded holder"}</span></div>
+        <span className="small-note">{entity.currentHolder?.type ? entity.currentHolder.type : "Latest recorded holder"}</span></div>
       <div><span className="field-label">Added to tracking</span><strong className="overview-date"><RecordedTime value={entity.createdAt} /></strong><span className="small-note">Recorded date and time</span></div>
     </section>
     <div className="trace-grid">
       <section className="journey panel" aria-labelledby="journey-heading">
-        <div className="section-heading"><div><span className="eyebrow">THE JOURNEY SO FAR</span><h2 id="journey-heading">Supply history</h2></div><span className="count-pill">{events.length} updates shown</span></div>
+        <div className="section-heading"><div><span className="eyebrow">The journey so far</span><h2 id="journey-heading">Supply history</h2></div><span className="count-pill">{events.length} updates shown</span></div>
         <p className="section-description">When each update happened and which businesses were involved, in recorded order. Times are shown in UTC.</p>
         {events.length ? <ol className="timeline">{events.map((event, index) => <TimelineEvent key={event.eventId} event={event} position={index + 1} />)}</ol> :
           <div className="empty-history"><h3>No updates yet</h3><p>The product is available to view, but no updates have been shared yet.</p></div>}
         {pageError && <Problem error={pageError} retry={loadMore} inline />}
-        {page.hasMore ? <div className="timeline-bottom"><button className="button secondary" onClick={loadMore} disabled={paging || wait > 0}>
+        {page.hasMore ? <div className="timeline-bottom"><button className="btn btn-outline-secondary" onClick={loadMore} disabled={paging || wait > 0}>
           {paging ? "Loading updates…" : wait > 0 ? `More updates in ${wait}s` : "Show more updates"}
         </button><span role="status" className="sr-only">{paging ? "Loading more updates." : `${events.length} updates shown.`}</span></div> :
           <p className="timeline-end">This is all the history currently shared for this product.</p>}
       </section>
       <aside className="record-sidebar">
         <section className="panel identity-panel" aria-labelledby="identity-heading">
-          <span className="eyebrow">PRODUCT DETAILS</span><h2 id="identity-heading">Tracking information</h2>
+          <span className="eyebrow">Product details</span><h2 id="identity-heading">Tracking information</h2>
           {"shortCode" in target ? <>
             <div className="short-tracking-code"><HashValue label="Tracking ID" value={target.shortCode} /></div>
             <CopyTrackingLink path={shortPath(target.shortCode)} />

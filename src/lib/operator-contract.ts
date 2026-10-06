@@ -26,7 +26,7 @@ export type OperatorOperations=z.infer<typeof operatorOperationsSchema>;
 
 const key=z.string().regex(/^[A-Za-z0-9_-]{8,64}$/);
 export const signupRequestSchema=loginRequestSchema.extend({password:z.string().min(12).max(128),name:z.string().trim().min(1).max(120),
- businessName:z.string().trim().min(1).max(120),businessType:z.enum(["Producer","Distributor","Transporter","Warehouse","Shop","Other business"]),publicProfile:z.boolean()});
+ businessName:z.string().trim().min(1).max(120),businessType:z.string().trim().min(1).max(120).regex(/^[^\x00-\x1f\x7f]*$/),publicProfile:z.boolean()});
 const detailText=(max:number)=>z.string().trim().min(1).max(max).regex(/^[^\x00-\x08\x0b\x0c\x0e-\x1f]*$/);
 export const productFieldsSchema=z.array(z.strictObject({label:detailText(80),value:detailText(1000)})).max(32)
  .refine(fields=>new Set(fields.map(field=>field.label.toLowerCase())).size===fields.length,"Each field needs a unique name.");

@@ -20,15 +20,21 @@ async function openAddProduct(page:import("@playwright/test").Page){
  await expect(page.getByRole("heading",{name:"Add a product",exact:true})).toBeVisible();
  await expect(page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true})).toHaveAttribute("aria-current","page");
 }
-test("a business registers independently without an invitation",async({page})=>{
+test("a business registers independently with its own type and no invitation",async({page},testInfo)=>{
  await page.goto("/operator/sign-in");await page.getByRole("button",{name:"Register a business",exact:true}).click();
  await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");
  await page.getByLabel("Business name",{exact:true}).fill("Independent Distributor");
- await page.getByLabel("Business type",{exact:true}).selectOption("Distributor");
+ await page.getByLabel("Business type",{exact:true}).fill("Customs broker & inspection");
  await page.getByLabel("Email address",{exact:true}).fill(operatorUser.email);
  await page.getByLabel("Password",{exact:true}).fill("Synthetic-Only-Password-2026");
  await expect(page.getByLabel("Invitation code",{exact:true})).toHaveCount(0);
+ await page.getByLabel("Show my business name in public product history",{exact:true}).check();
+ expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.screenshot({path:testInfo.outputPath("register-business.png"),fullPage:true});
+ const sent=page.waitForRequest(request=>request.url().endsWith("/signup")&&request.method()==="POST");
  await page.getByRole("button",{name:"Register business",exact:true}).click();
+ expect((await sent).postDataJSON()).toMatchObject({businessType:"Customs broker & inspection",publicProfile:true});
  await expect(page.getByText("Your business account is ready. Sign in with your email and password.",{exact:true})).toBeVisible();
  await expect(page.getByLabel("Password",{exact:true})).toHaveValue("");
  expect(await page.evaluate(()=>[localStorage.length,sessionStorage.length])).toEqual([0,0]);
@@ -64,11 +70,13 @@ test("a produced product has a decodable Tracking ID QR, and the holder can clos
 test("operators add and remove custom fields, save JSON and see exact values in product details",async({page})=>{
  await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("Custom product");
  await page.getByRole("button",{name:"Add field",exact:true}).click();
- await page.getByLabel("Field name 1",{exact:true}).fill("Batch number");await page.getByLabel("Field value 1",{exact:true}).fill("BATCH-2026-001");
+ await page.getByLabel("Detail name 1",{exact:true}).fill("Batch number");await page.getByLabel("Detail value 1",{exact:true}).fill("BATCH-2026-001");
  await page.getByRole("button",{name:"Add field",exact:true}).click();
- await page.getByLabel("Field name 2",{exact:true}).fill("Ingredients");await page.getByLabel("Field value 2",{exact:true}).fill("Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>");
+ await page.getByLabel("Detail name 2",{exact:true}).fill("Ingredients");await page.getByLabel("Detail value 2",{exact:true}).fill("Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>");
+ await expect(page.getByLabel("Detail value 1",{exact:true})).toHaveValue("BATCH-2026-001");
+ await expect(page.getByLabel("Detail value 2",{exact:true})).toHaveValue("Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>");
  await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByRole("button",{name:"Remove field 3",exact:true}).click();
- await expect(page.getByLabel("Field name 3",{exact:true})).toHaveCount(0);
+ await expect(page.getByLabel("Detail name 3",{exact:true})).toHaveCount(0);
  await page.getByLabel(/Share this product's details/).check();
  expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
@@ -85,13 +93,13 @@ test("operators add and remove custom fields, save JSON and see exact values in 
 });
 test("custom field names are unique and the form limits the number of fields",async({page})=>{
  await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("Duplicate field product");
- for(let i=1;i<=2;i++){await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByLabel("Field name "+i,{exact:true}).fill(i===1?"Batch":" batch ");await page.getByLabel("Field value "+i,{exact:true}).fill(String(i));}
+ for(let i=1;i<=2;i++){await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByLabel("Detail name "+i,{exact:true}).fill(i===1?"Batch":" batch ");await page.getByLabel("Detail value "+i,{exact:true}).fill(String(i));}
  let writes=0;page.on("request",request=>{if(request.url().endsWith("/products/create")&&request.method()==="POST")writes++;});
  await page.getByRole("button",{name:"Add product",exact:true}).click();await expect(page.getByRole("status")).toContainText("unique name");expect(writes).toBe(0);
  for(let i=2;i<32;i++)await page.getByRole("button",{name:"Add field",exact:true}).click();
  await expect(page.getByRole("button",{name:"Add field",exact:true})).toBeDisabled();
  await page.getByRole("button",{name:"Remove field 1",exact:true}).click();
- await expect(page.getByLabel("Field name 1",{exact:true})).toHaveValue(" batch ");
+ await expect(page.getByLabel("Detail name 1",{exact:true})).toHaveValue(" batch ");
  await expect(page.getByRole("button",{name:"Add field",exact:true})).toBeEnabled();
 });
 test("business sign-in, products, filters and sign-out work through the real session gateway",async({page,context},testInfo)=>{
@@ -117,12 +125,13 @@ test("business sign-in, products, filters and sign-out work through the real ses
 test("businesses, operation status and named product supply history are readable",async({page})=>{
  await signIn(page);await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Businesses",exact:true}).click();
  await expect(page.getByRole("heading",{name:"Demo Distributor",exact:true})).toBeVisible();
- await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Operation activity",exact:true}).click();
+ await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Activity",exact:true}).click();
  await expect(page.getByText("Confirmed",{exact:true})).toBeVisible();await expect(page.getByRole("heading",{name:"Update recorded",exact:true})).toBeVisible();
  await page.getByRole("link",{name:"View product",exact:true}).click();
  await expect(page.getByRole("heading",{name:operatorProduct.name,exact:true})).toBeVisible();
  await expect(page.locator(".operator-timeline li")).toHaveCount(2);await expect(page.locator(".operator-timeline time")).toHaveCount(2);
  await expect(page.getByText("Demo Producer → Demo Distributor",{exact:true})).toBeVisible();
+ await expect(page).toHaveTitle("TraceForge · Product details");
  expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
 });
 test("signed-out access and missing/revoked sessions never display product information",async({page,request})=>{

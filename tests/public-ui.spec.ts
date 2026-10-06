@@ -85,7 +85,7 @@ test("production Next gateway shows only safe records without cookies or tokens"
   await expect(page.getByRole("heading", { name: "Batch tracking" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Supply history" })).toBeVisible();
   await expect(page.locator(".timeline-event")).toHaveCount(4);
-  await expect(page.getByText("UPDATE 1", { exact: true })).toBeVisible();
+  await expect(page.getByText("Update 1", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product added", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product information updated", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Product received", exact: true })).toBeVisible();

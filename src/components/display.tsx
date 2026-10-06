@@ -26,7 +26,7 @@ export function HashValue({ label, value }: { label: string; value: string }) {
   };
   return <div className="hash-row">
     <span className="field-label">{label}</span>
-    <div className="hash-content"><code>{value}</code><button className="copy-button" aria-label={`Copy ${label}`} onClick={copy}>
+    <div className="hash-content"><code>{value}</code><button className="btn btn-outline-secondary btn-sm copy-button" aria-label={`Copy ${label}`} onClick={copy}>
       {copied ? "Copied" : "Copy"}
     </button></div>
     <span className="sr-only" role="status">{copied ? `${label} copied.` : copyFailed ? "Copy unavailable. Select and copy the value manually." : ""}</span>
@@ -47,7 +47,7 @@ export function CopyTrackingLink({ path }: { path: string }) {
     } catch { setStatus("failed"); }
   };
   return <div className="share-tracking">
-    <button className="button secondary" onClick={copy}>{status === "copied" ? "Link copied" : "Copy tracking link"}</button>
+    <button className="btn btn-outline-secondary" onClick={copy}>{status === "copied" ? "Link copied" : "Copy tracking link"}</button>
     <span className={status === "failed" ? "small-note" : "sr-only"} role="status">
       {status === "copied" ? "Tracking link copied." : status === "failed" ? "Copy unavailable. Copy the link from your browser's address bar." : ""}
     </span>
@@ -82,10 +82,10 @@ export function Problem({ error, retry, inline = false }: { error: PublicApiErro
     {inline ? <h3>{title}</h3> : <Heading>{title}</Heading>}
     <p>{description}</p>
     <div className="actions">
-      {error.kind !== "invalid" && <button className="button primary" onClick={retry} disabled={wait > 0}>
+      {error.kind !== "invalid" && <button className="btn btn-primary" onClick={retry} disabled={wait > 0}>
         {wait > 0 ? `Try again in ${wait}s` : "Try again"}
       </button>}
-      {!inline && <Link className="button secondary" href="/" prefetch={false}>Track another product</Link>}
+      {!inline && <Link className="btn btn-outline-secondary" href="/" prefetch={false}>Track another product</Link>}
     </div>
   </section>;
 }
