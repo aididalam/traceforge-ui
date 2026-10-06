@@ -7,6 +7,7 @@ import jsQR from "jsqr";
 import { operatorWrite, receiveLookup } from "../../lib/operator-client";
 import { normalizeId, normalizeShortCode, parseTraceLink, publicOrigin, trackingPath } from "../../lib/urls";
 import type { ReceiveLookup } from "../../lib/operator-contract";
+import { productFieldsSchema } from "../../lib/operator-contract";
 
 function trackingInput(value:string) {
  const direct=normalizeId(value.trim())??normalizeShortCode(value.trim());
@@ -60,16 +61,30 @@ export function ReceiveProduct({initial=""}:{initial?:string}) {
 }
 export function CreateProduct() {
  const [name,setName]=useState(""),[description,setDescription]=useState(""),[publish,setPublish]=useState(false),[busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[created,setCreated]=useState<string|null>(null);
+ const [fields,setFields]=useState<{id:string;label:string;value:string}[]>([]);
  const key=useRef<string|null>(null);
- const submit=async(event:FormEvent)=>{event.preventDefault();if(busy)return;setBusy(true);setNotice("");key.current??=crypto.randomUUID();
-  try{const result=await operatorWrite("products/create",{name,description,publish,idempotencyKey:key.current});setNotice(message(result.status));setCreated(result.trackingId);}
+ const submit=async(event:FormEvent)=>{event.preventDefault();if(busy||created)return;
+  const details=productFieldsSchema.safeParse(fields.map(({label,value})=>({label,value})));
+  if(!details.success){setNotice("Give every additional field a unique name and a value. Up to 32 fields are supported.");return;}
+  setBusy(true);setNotice("");key.current??=crypto.randomUUID();
+  try{const result=await operatorWrite("products/create",{name,description,fields:details.data,publish,idempotencyKey:key.current});setNotice(message(result.status));setCreated(result.trackingId);}
   catch{setNotice("Product could not be confirmed. Check operation activity and retry with the same details.");}finally{setBusy(false);}};
  return <section className="panel operator-panel"><h2>Add a product</h2><form onSubmit={submit}>
-  <label className="input-label">Product name<input value={name} onChange={event=>setName(event.target.value)} required maxLength={240}/></label>
-  <label className="input-label">Product description<textarea value={description} onChange={event=>setDescription(event.target.value)} maxLength={2000}/></label>
-  <label><input type="checkbox" checked={publish} onChange={event=>setPublish(event.target.checked)}/> Share this product&apos;s name, description and supply history publicly</label>
+  <label className="input-label">Product name<input value={name} onChange={event=>setName(event.target.value)} required maxLength={240} disabled={busy||!!created}/></label>
+  <label className="input-label">Product description<textarea value={description} onChange={event=>setDescription(event.target.value)} maxLength={2000} disabled={busy||!!created}/></label>
+  <fieldset className="product-detail-editor" disabled={busy||!!created}><legend>Additional product details</legend>
+   <p>Add details such as batch number, size, ingredients or expiry date.</p>
+   {fields.map((field,index)=><div className="product-detail-row" key={field.id}>
+    <label className="input-label">Field name {index+1}<input value={field.label} onChange={event=>setFields(current=>current.map(item=>item.id===field.id?{...item,label:event.target.value}:item))} required maxLength={80} placeholder="e.g. Batch number"/></label>
+    <label className="input-label">Field value {index+1}<textarea value={field.value} onChange={event=>setFields(current=>current.map(item=>item.id===field.id?{...item,value:event.target.value}:item))} required maxLength={1000} placeholder="e.g. BATCH-2026-001"/></label>
+    <button className="button secondary" type="button" aria-label={`Remove field ${index+1}`} onClick={()=>setFields(current=>current.filter(item=>item.id!==field.id))}>Remove</button>
+   </div>)}
+   <button className="button secondary" type="button" disabled={fields.length>=32} onClick={()=>setFields(current=>[...current,{id:crypto.randomUUID(),label:"",value:""}])}>Add field</button>
+   <p className="detail-context">{fields.length} of 32 fields added. Each field needs a different name.</p>
+  </fieldset>
+  <label><input type="checkbox" checked={publish} onChange={event=>setPublish(event.target.checked)} disabled={busy||!!created}/> Share this product&apos;s details and supply history publicly, including the additional fields</label>
   <button className="button primary" disabled={busy||!!created}>{busy?"Adding…":"Add product"}</button></form>
-  {notice&&<p role="status">{notice}</p>}{created&&<><Link href={`/operator/products/${created}`} prefetch={false}>Open product</Link><ProductQR trackingId={created}/><button className="button secondary" onClick={()=>{setCreated(null);setName("");setDescription("");setPublish(false);key.current=null;setNotice("");}}>Add another product</button></>}
+  {notice&&<p role="status">{notice}</p>}{created&&<><Link href={`/operator/products/${created}`} prefetch={false}>Open product</Link><ProductQR trackingId={created}/><button className="button secondary" onClick={()=>{setCreated(null);setName("");setDescription("");setFields([]);setPublish(false);key.current=null;setNotice("");}}>Add another product</button></>}
  </section>;
 }
 export function ProductQR({trackingId}:{trackingId:string}) {

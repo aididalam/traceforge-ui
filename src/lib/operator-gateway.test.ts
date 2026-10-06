@@ -16,6 +16,20 @@ async function signIn(spy:ReturnType<typeof vi.fn<typeof fetch>>,previousCookie?
  return cookie.split(";")[0];
 }
 describe("operator gateway session boundary",()=>{
+ it("validates dynamic product fields and forwards substantial JSON only on the create route",async()=>{
+  const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy);
+  const base={name:"Product",description:"",publish:false,idempotencyKey:"synthetic-create-1234"};
+  const fields=Array.from({length:8},(_,i)=>({label:"Field "+i,value:"বাংলাদেশ · 500mL "+"x".repeat(950)}));
+  spy.mockClear();
+  for(const invalid of [[{label:"Batch",value:"1"},{label:" batch ",value:"2"}],[{label:"Batch",value:1}],[{label:"Batch",value:"1",secret:true}],[{label:" ",value:"1"}],Array.from({length:33},(_,i)=>({label:"Field "+i,value:"1"}))])expect((await operatorGateway(request("create",{...base,fields:invalid},cookie),"create")).status).toBe(400);
+  expect(spy).not.toHaveBeenCalled();
+  spy.mockResolvedValue(response({operationId:"12345678-1234-4234-8234-123456789def",status:"CONFIRMED",transactionHash:"0x"+"44".repeat(32),blockNumber:"12",trackingId:operatorHistory.product.id}));
+  expect((await operatorGateway(request("create",{...base,fields},cookie),"create")).status).toBe(200);
+  expect(JSON.parse(spy.mock.calls.at(-1)![1]!.body as string).fields).toEqual(fields);
+  spy.mockClear();
+  expect((await operatorGateway(request("create",{...base,description:"x".repeat(256*1024)},cookie),"create")).status).toBe(400);
+  expect(spy).not.toHaveBeenCalled();
+ });
  it("guards product mutations with exact origin, strict payloads, session credentials and matching tracking identity",async()=>{
   const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy),id=operatorHistory.product.id;
   const body={version:"1",confirmed:true,idempotencyKey:"synthetic-request-1234"};

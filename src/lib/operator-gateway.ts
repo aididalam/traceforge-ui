@@ -32,10 +32,10 @@ function current(request:Request,origin:string){
   if(session.expires<=Date.now()){sessions.delete(key);return null;}
   return {key,session};
 }
-async function limitedBody(request:Request){
+async function limitedBody(request:Request,maxBytes=4096){
   const reader=request.body?.getReader();if(!reader)throw Error();
   const chunks:Uint8Array[]=[];let total=0;
-  try{while(true){const chunk=await reader.read();if(chunk.done)break;total+=chunk.value.byteLength;if(total>4096){await reader.cancel();throw Error();}chunks.push(chunk.value);}}
+  try{while(true){const chunk=await reader.read();if(chunk.done)break;total+=chunk.value.byteLength;if(total>maxBytes){await reader.cancel();throw Error();}chunks.push(chunk.value);}}
   finally{reader.releaseLock();}
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
@@ -59,7 +59,7 @@ export async function operatorGateway(request:Request,action:OperatorAction,prod
   let payload:unknown;
   if(mutation&&action!=="logout"){
     if(!request.headers.get("content-type")?.startsWith("application/json"))return fail(400,"invalid_request");
-    try{payload=({login:loginRequestSchema,signup:signupRequestSchema,activate:activationRequestSchema,create:createProductRequestSchema,receive:receiveProductRequestSchema,close:closeProductRequestSchema} as Record<string,z.ZodType>)[action].parse(await limitedBody(request));
+    try{payload=({login:loginRequestSchema,signup:signupRequestSchema,activate:activationRequestSchema,create:createProductRequestSchema,receive:receiveProductRequestSchema,close:closeProductRequestSchema} as Record<string,z.ZodType>)[action].parse(await limitedBody(request,action==="create"?256*1024:4096));
     }catch{return fail(400,"invalid_request");}
   }
   try{

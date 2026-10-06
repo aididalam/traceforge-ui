@@ -209,3 +209,10 @@ summary { cursor: pointer; color: #4b6340; min-height: 32px; padding: 6px 0; fon
 .operator-panel .button, .operator-qr .button { margin-block: .6rem; margin-right: .7rem; }
 .operator-qr { background: white; border-radius: .4rem; padding: 1.5rem; overflow-wrap: anywhere; }
 .operator-qr canvas { max-width: 100%; height: auto; }
+.product-detail-editor { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .4rem; }
+.product-detail-editor legend { padding-inline: .4rem; font-weight: 600; }
+.product-detail-editor > p { color: var(--muted); font-size: 12px; }
+.product-detail-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 1rem; align-items: start; margin-block: 1rem; padding-block: 1rem; border-top: 1px solid var(--line); }
+.product-detail-row textarea { min-height: 3rem; }
+.product-detail-row .button { align-self: center; margin: 0; }
+@media (max-width: 720px) { .product-detail-row { grid-template-columns: minmax(0, 1fr); } .product-detail-row .button { justify-self: start; } }

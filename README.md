@@ -176,6 +176,13 @@ product. Confirm physical receipt to immediately change its current holder;
 there is no sender proposal or receiving workspace role. Current holders close
 tracking with Sold, Lost, Damaged or Disposed. Closed products stay readable.
 
+The Add product form also supports dynamic additional details: add/remove fields,
+choose each label and text value, and save them with the product as JSON. Up to
+32 unique fields are supported. Product details show the saved values exactly;
+public sharing explicitly includes the additional fields. Duplicate/blank names,
+blank values, unexpected properties and oversized input are rejected by both
+the gateway and API. Existing products remain compatible.
+
 This client is separate from public tracking. Its fixed `/operator/api/*`
 handlers call the API's `/operator/v1/*` routes. API session credentials stay in
 server memory; the browser gets an opaque HttpOnly, SameSite=Strict cookie

@@ -49,6 +49,39 @@ test("a produced product has a decodable Tracking ID QR, and the holder can clos
  await close.click();expect((await sent).postDataJSON()).toMatchObject({reason:"Damaged",confirmed:true});
  await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();await expect(close).toBeDisabled();
 });
+test("operators add and remove custom fields, save JSON and see exact values in product details",async({page})=>{
+ await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("Custom product");
+ await page.getByRole("button",{name:"Add field",exact:true}).click();
+ await page.getByLabel("Field name 1",{exact:true}).fill("Batch number");await page.getByLabel("Field value 1",{exact:true}).fill("BATCH-2026-001");
+ await page.getByRole("button",{name:"Add field",exact:true}).click();
+ await page.getByLabel("Field name 2",{exact:true}).fill("Ingredients");await page.getByLabel("Field value 2",{exact:true}).fill("Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>");
+ await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByRole("button",{name:"Remove field 3",exact:true}).click();
+ await expect(page.getByLabel("Field name 3",{exact:true})).toHaveCount(0);
+ await page.getByLabel(/Share this product's details/).check();
+ expect((await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze()).violations).toEqual([]);
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ const sent=page.waitForRequest(request=>request.url().endsWith("/products/create")&&request.method()==="POST");
+ await page.getByRole("button",{name:"Add product",exact:true}).click();
+ const fields=[{label:"Batch number",value:"BATCH-2026-001"},{label:"Ingredients",value:"Water, Sugar\n500mL · বাংলাদেশ <b>plain text</b>"}];
+ expect((await sent).postDataJSON()).toMatchObject({fields,publish:true});
+ await page.route("**/operator/api/products/"+operatorProduct.id+"/history?*",route=>route.fulfill({json:{...operatorHistory,product:{...operatorProduct,fields}}}));
+ await page.getByRole("link",{name:"Open product",exact:true}).click();
+ await expect(page.locator(".product-fields dt").filter({hasText:"Batch number"})).toBeVisible();
+ await expect(page.locator(".product-fields dd").filter({hasText:"BATCH-2026-001"})).toBeVisible();
+ await expect(page.locator(".product-fields dd").filter({hasText:"500mL · বাংলাদেশ <b>plain text</b>"})).toBeVisible();
+ await expect(page.locator(".product-fields b")).toHaveCount(0);
+});
+test("custom field names are unique and the form limits the number of fields",async({page})=>{
+ await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("Duplicate field product");
+ for(let i=1;i<=2;i++){await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByLabel("Field name "+i,{exact:true}).fill(i===1?"Batch":" batch ");await page.getByLabel("Field value "+i,{exact:true}).fill(String(i));}
+ let writes=0;page.on("request",request=>{if(request.url().endsWith("/products/create")&&request.method()==="POST")writes++;});
+ await page.getByRole("button",{name:"Add product",exact:true}).click();await expect(page.getByRole("status")).toContainText("unique name");expect(writes).toBe(0);
+ for(let i=2;i<32;i++)await page.getByRole("button",{name:"Add field",exact:true}).click();
+ await expect(page.getByRole("button",{name:"Add field",exact:true})).toBeDisabled();
+ await page.getByRole("button",{name:"Remove field 1",exact:true}).click();
+ await expect(page.getByLabel("Field name 1",{exact:true})).toHaveValue(" batch ");
+ await expect(page.getByRole("button",{name:"Add field",exact:true})).toBeEnabled();
+});
 test("business sign-in, products, filters and sign-out work through the real session gateway",async({page,context},testInfo)=>{
  const errors:string[]=[],calls:{path:string;auth:boolean;method:string}[]=[];
  page.on("pageerror",error=>errors.push(error.message));page.on("request",request=>{const path=new URL(request.url()).pathname;if(path.startsWith("/operator/api"))calls.push({path,auth:Boolean(request.headers().authorization),method:request.method()});});
