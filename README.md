@@ -176,7 +176,9 @@ product. Confirm physical receipt to immediately change its current holder;
 there is no sender proposal or receiving workspace role. Current holders close
 tracking with Sold, Lost, Damaged or Disposed. Closed products stay readable.
 
-The Add product form also supports dynamic additional details: add/remove fields,
+Overview shows business statistics and product summaries. The Products page has
+an Add product link opening the separate `/operator/products/new` form.
+The Add product form supports dynamic additional details: add/remove fields,
 choose each label and text value, and save them with the product as JSON. Up to
 32 unique fields are supported. Product details show the saved values exactly;
 public sharing explicitly includes the additional fields. Duplicate/blank names,

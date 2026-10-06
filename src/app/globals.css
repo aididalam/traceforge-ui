@@ -209,6 +209,7 @@ summary { cursor: pointer; color: #4b6340; min-height: 32px; padding: 6px 0; fon
 .operator-panel .button, .operator-qr .button { margin-block: .6rem; margin-right: .7rem; }
 .operator-qr { background: white; border-radius: .4rem; padding: 1.5rem; overflow-wrap: anywhere; }
 .operator-qr canvas { max-width: 100%; height: auto; }
+.operator-page-actions { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
 .product-detail-editor { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .4rem; }
 .product-detail-editor legend { padding-inline: .4rem; font-weight: 600; }
 .product-detail-editor > p { color: var(--muted); font-size: 12px; }

@@ -8,6 +8,18 @@ async function signIn(page:import("@playwright/test").Page){
  await expect(page.getByRole("heading",{name:"Business dashboard",exact:true})).toBeVisible();
  await expect(page.getByRole("link",{name:"Garden Tea Batch 001"})).toBeVisible();
 }
+async function openAddProduct(page:import("@playwright/test").Page){
+ await signIn(page);
+ await expect(page.locator(".operator-stats")).toBeVisible();
+ await expect(page.getByLabel("Product name",{exact:true})).toHaveCount(0);
+ await page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true}).click();
+ await expect(page.getByRole("heading",{name:"Products",exact:true})).toBeVisible();
+ await expect(page.getByLabel("Product name",{exact:true})).toHaveCount(0);
+ await page.getByRole("link",{name:"Add product",exact:true}).click();
+ await expect(page).toHaveURL(/\/operator\/products\/new$/);
+ await expect(page.getByRole("heading",{name:"Add a product",exact:true})).toBeVisible();
+ await expect(page.getByRole("navigation",{name:"Business dashboard"}).getByRole("link",{name:"Products",exact:true})).toHaveAttribute("aria-current","page");
+}
 test("a business registers independently without an invitation",async({page})=>{
  await page.goto("/operator/sign-in");await page.getByRole("button",{name:"Register a business",exact:true}).click();
  await page.getByLabel("Your name",{exact:true}).fill("Demo Operator");
@@ -35,7 +47,7 @@ test("receipt requires physical confirmation and uses a fixed authenticated writ
  await expect(receive).toHaveCount(0);
 });
 test("a produced product has a decodable Tracking ID QR, and the holder can close it with a reason",async({page})=>{
- await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("New Tea Pack");
+ await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("New Tea Pack");
  await page.getByLabel("Product description",{exact:true}).fill("Product details for the printed tracking record.");
  await page.getByRole("button",{name:"Add product",exact:true}).click();
  const qr=page.getByRole("img",{name:"Product tracking QR code",exact:true});await expect(qr).toBeVisible();
@@ -50,7 +62,7 @@ test("a produced product has a decodable Tracking ID QR, and the holder can clos
  await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();await expect(close).toBeDisabled();
 });
 test("operators add and remove custom fields, save JSON and see exact values in product details",async({page})=>{
- await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("Custom product");
+ await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("Custom product");
  await page.getByRole("button",{name:"Add field",exact:true}).click();
  await page.getByLabel("Field name 1",{exact:true}).fill("Batch number");await page.getByLabel("Field value 1",{exact:true}).fill("BATCH-2026-001");
  await page.getByRole("button",{name:"Add field",exact:true}).click();
@@ -72,7 +84,7 @@ test("operators add and remove custom fields, save JSON and see exact values in 
  await expect(page.locator(".product-fields b")).toHaveCount(0);
 });
 test("custom field names are unique and the form limits the number of fields",async({page})=>{
- await signIn(page);await page.getByLabel("Product name",{exact:true}).fill("Duplicate field product");
+ await openAddProduct(page);await page.getByLabel("Product name",{exact:true}).fill("Duplicate field product");
  for(let i=1;i<=2;i++){await page.getByRole("button",{name:"Add field",exact:true}).click();await page.getByLabel("Field name "+i,{exact:true}).fill(i===1?"Batch":" batch ");await page.getByLabel("Field value "+i,{exact:true}).fill(String(i));}
  let writes=0;page.on("request",request=>{if(request.url().endsWith("/products/create")&&request.method()==="POST")writes++;});
  await page.getByRole("button",{name:"Add product",exact:true}).click();await expect(page.getByRole("status")).toContainText("unique name");expect(writes).toBe(0);
@@ -116,6 +128,7 @@ test("businesses, operation status and named product supply history are readable
 test("signed-out access and missing/revoked sessions never display product information",async({page,request})=>{
  expect((await request.get("/operator/api/products")).status()).toBe(401);
  await page.goto("/operator");await expect(page).toHaveURL(/\/operator\/sign-in$/);await expect(page.locator("[data-operator-record]")).toHaveCount(0);
+ await page.goto("/operator/products/new");await expect(page).toHaveURL(/\/operator\/sign-in$/);await expect(page.getByLabel("Product name",{exact:true})).toHaveCount(0);
  await signIn(page);
  await page.route("**/operator/api/**",route=>route.fulfill({status:401,json:{error:{code:"signed_out"}}}));
  await page.getByRole("button",{name:"Refresh",exact:true}).click();await expect(page).toHaveURL(/\/operator\/sign-in$/);

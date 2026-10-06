@@ -69,7 +69,7 @@ export function CreateProduct() {
   setBusy(true);setNotice("");key.current??=crypto.randomUUID();
   try{const result=await operatorWrite("products/create",{name,description,fields:details.data,publish,idempotencyKey:key.current});setNotice(message(result.status));setCreated(result.trackingId);}
   catch{setNotice("Product could not be confirmed. Check operation activity and retry with the same details.");}finally{setBusy(false);}};
- return <section className="panel operator-panel"><h2>Add a product</h2><form onSubmit={submit}>
+ return <section className="panel operator-panel"><h2>Product information</h2><form onSubmit={submit}>
   <label className="input-label">Product name<input value={name} onChange={event=>setName(event.target.value)} required maxLength={240} disabled={busy||!!created}/></label>
   <label className="input-label">Product description<textarea value={description} onChange={event=>setDescription(event.target.value)} maxLength={2000} disabled={busy||!!created}/></label>
   <fieldset className="product-detail-editor" disabled={busy||!!created}><legend>Additional product details</legend>
