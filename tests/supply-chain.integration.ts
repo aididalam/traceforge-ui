@@ -114,8 +114,8 @@ test("real chain: registration, partial receipts, returns, removals, tracking an
   await lookup(distributor,fixture.privateProduct);await expect(distributor.locator(".receipt-preview")).toContainText("Product details not shared");await expect(distributor.locator("body")).not.toContainText("PRIVATE_BROWSER_SENTINEL");
   await publicPage.goto("/s/"+fixture.privateProduct.shortCode);await expect(publicPage.getByRole("heading",{name:"Product history unavailable"})).toBeVisible();await expect(publicPage.locator("[data-public-record]")).toHaveCount(0);await expect(publicPage.locator("body")).not.toContainText("Private browser product");
   await publicPage.goto("/s/"+fixture.paginated.shortCode);await expect(publicPage.locator(".timeline-event")).toHaveCount(50);
-  const nextPage=publicPage.waitForResponse(r=>new URL(r.url()).pathname.endsWith("/history")&&new URL(r.url()).searchParams.get("after")!=="0");
-  await button(publicPage,"Show more updates").click();const nextResponse=await nextPage;expect(BigInt(new URL(nextResponse.url()).searchParams.get("after")!)).toBeGreaterThan(9007199254740991n);
+  const nextPage=publicPage.waitForResponse(r=>{const url=new URL(r.url()),after=url.searchParams.get("afterEventId");return url.pathname.endsWith("/history")&&after!==null&&after!=="0";});
+  await button(publicPage,"Show more updates").click();const nextResponse=await nextPage;expect(BigInt(new URL(nextResponse.url()).searchParams.get("afterEventId")!)).toBeGreaterThan(9007199254740991n);
   await expect(publicPage.locator(".timeline-event")).toHaveCount(56);await expect(button(publicPage,"Show more updates")).toHaveCount(0);
   const refs=await publicPage.locator(".timeline-event").evaluateAll(items=>items.map(e=>e.textContent));expect(new Set(refs).size).toBe(56);
   await dashboard(producer,"/operator/products/"+fixture.paginated.trackingId);await expect(producer.locator(".operator-timeline li")).toHaveCount(50);await button(producer,"Show more updates").click();await expect(producer.locator(".operator-timeline li")).toHaveCount(56);
