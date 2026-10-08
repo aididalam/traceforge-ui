@@ -15,10 +15,12 @@ import { productDisplayName } from "../../lib/display-labels";
 import { ReferenceLookup, trackingInput, formatCount } from "../reference-lookup";
 import { StockSummary, RouteDetails } from "../product-stock";
 import { HashValue, useRetryWait } from "../display";
+import { useSiteOrigin } from "../site-config";
 const message=(status:string)=>status==="CONFIRMED"?"Confirmed. Product history will update shortly.":status==="FAILED"?"This operation failed. Refresh the product before trying again.":"Submitted. Awaiting confirmation. Retry the same request to check confirmation, or check Activity.";
 type Attempt={path:string;payload:Record<string,unknown>};
 function quantityNumber(value:string,max:string,min=1){if(!/^[1-9][0-9]*$/.test(value))return null;const n=Number(value);return Number.isSafeInteger(n)&&n>=min&&BigInt(value)<=BigInt(max)?n:null;}
 export function ReceiveProduct({initial="",organizationId}:{initial?:string;organizationId:string}) {
+ const siteOrigin=useSiteOrigin();
  const router=useRouter();
  const [scanned,setScanned]=useState(initial),[product,setProduct]=useState<ReceiveLookup|null>(null),[confirmed,setConfirmed]=useState(false);
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[camera,setCamera]=useState(false),[routes,setRoutes]=useState<RoutePage|null>(null),[routeId,setRouteId]=useState(""),[amount,setAmount]=useState("1"),[attempt,setAttempt]=useState<Attempt|null>(null),[done,setDone]=useState(false),[retryAt,setRetryAt]=useState(0);
@@ -48,7 +50,7 @@ export function ReceiveProduct({initial="",organizationId}:{initial?:string;orga
    const tick=()=>{const target=video.current;if(!stream.current||!target)return;
     if(target.readyState>=2){canvas.width=target.videoWidth;canvas.height=target.videoHeight;context.drawImage(target,0,0);
      const pixels=context.getImageData(0,0,canvas.width,canvas.height),code=jsQR(pixels.data,pixels.width,pixels.height);
-     if(code){try{const id=trackingInput(code.data);setScanned(id);stop();void lookup(id);return;}catch{setNotice("Use a TraceForge QR code from this site.");}}}
+     if(code){try{const id=trackingInput(code.data,siteOrigin);setScanned(id);stop();void lookup(id);return;}catch{setNotice("Use a TraceForge QR code from this site.");}}}
     timer.current=setTimeout(tick,250);
    };tick();
   }catch{stop();setNotice("Camera unavailable. Enter the Tracking ID or paste the product link.");}
@@ -124,8 +126,9 @@ export function CreateProduct({businessCode}:{businessCode?:string|null}) {
  </section>;
 }
 export function ProductQR({trackingId,shortCode}:{trackingId:string;shortCode?:string|null}) {
+ const siteOrigin=useSiteOrigin();
  const [url,setUrl]=useState("");const canvas=useRef<HTMLCanvasElement|null>(null);
- useEffect(()=>{const origin=publicOrigin(process.env.NEXT_PUBLIC_SITE_ORIGIN||window.location.origin,true);const link=origin+(shortCode?shortPath(shortCode):trackingPath(trackingId));setUrl(link);if(canvas.current)void QRCode.toCanvas(canvas.current,link,{width:240,margin:4,errorCorrectionLevel:"M"});},[trackingId,shortCode]);
+ useEffect(()=>{const origin=publicOrigin(siteOrigin??window.location.origin,true);const link=origin+(shortCode?shortPath(shortCode):trackingPath(trackingId));setUrl(link);if(canvas.current)void QRCode.toCanvas(canvas.current,link,{width:240,margin:4,errorCorrectionLevel:"M"});},[trackingId,shortCode,siteOrigin]);
  return <div className="operator-qr"><h3>Product QR code</h3><canvas ref={canvas} role="img" aria-label="Product tracking QR code"/><HashValue label="Tracking ID" value={shortCode??trackingId}/>{shortCode&&<details><summary>Full tracking reference</summary><HashValue label="Full tracking reference" value={trackingId}/></details>}
   <a href={url}>Open tracking link</a><button className="btn btn-outline-secondary" onClick={()=>{const a=document.createElement("a");a.href=canvas.current!.toDataURL("image/png");a.download="traceforge-product-qr.png";a.click();}}>Download QR</button></div>;
 }

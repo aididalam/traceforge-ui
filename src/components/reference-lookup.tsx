@@ -7,13 +7,15 @@ import { normalizeId, normalizeShortCode, parseTraceLink, publicOrigin } from ".
 import { businessCode, referenceId, type SearchPage } from "../lib/product-contract";
 import { SupplyChainStatus } from "./product-information";
 import { useRetryWait } from "./display";
+import { useSiteOrigin } from "./site-config";
 const publicClient=createPublicClient(process.env.NEXT_PUBLIC_API_BASE_URL??"");
-export function trackingInput(value:string){
+export function trackingInput(value:string,siteOrigin:string|null=null){
  const direct=normalizeId(value.trim())??normalizeShortCode(value.trim());if(direct)return direct;
- const allowed=[window.location.origin];if(process.env.NEXT_PUBLIC_SITE_ORIGIN)allowed.push(publicOrigin(process.env.NEXT_PUBLIC_SITE_ORIGIN,true));
+ const allowed=[window.location.origin];if(siteOrigin)allowed.push(publicOrigin(siteOrigin,true));
  const path=parseTraceLink(value,allowed,true);if(path.startsWith("/trace/"))throw Error();return path.split("/").at(-1)!;
 }
 export function ReferenceLookup({operator=false,initial="",busy=false,onSelect,onReset}:{operator?:boolean;initial?:string;busy?:boolean;onSelect:(id:string)=>void|Promise<void>;onReset?:()=>void}){
+ const siteOrigin=useSiteOrigin();
  const router=useRouter();
  const [input,setInput]=useState(initial),[code,setCode]=useState(""),[results,setResults]=useState<SearchPage|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState(""),[retryAt,setRetryAt]=useState(0);
  const active=useRef<AbortController|null>(null),criteria=useRef<{id:string;code:string}|null>(null);const wait=useRetryWait(retryAt);
@@ -34,7 +36,7 @@ export function ReferenceLookup({operator=false,initial="",busy=false,onSelect,o
   finally{if(active.current===controller)setLoading(false);}
  };
  const choose=async(id:string)=>{active.current?.abort();setResults(null);setLoading(false);onReset?.();await onSelect(id);};
- return <div className="reference-lookup"><form onSubmit={event=>{event.preventDefault();if(busy||loading||wait)return;try{void choose(trackingInput(input));}catch{if(/^(0x|[a-z][a-z0-9+.-]*:)/i.test(input.trim()))setError("Check the Tracking ID or use a product link from this site.");else void search();}}}>
+ return <div className="reference-lookup"><form onSubmit={event=>{event.preventDefault();if(busy||loading||wait)return;try{void choose(trackingInput(input,siteOrigin));}catch{if(/^(0x|[a-z][a-z0-9+.-]*:)/i.test(input.trim()))setError("Check the Tracking ID or use a product link from this site.");else void search();}}}>
   <label className="input-label">Tracking ID or product / batch ID<input className="form-control" value={input} onChange={event=>{reset();setInput(event.target.value);}} required maxLength={500} autoComplete="off" spellCheck={false} disabled={busy} aria-describedby="reference-help"/></label>
   <p id="reference-help" className="form-text">Use the short code, full Tracking ID, product link, or the ID printed by the business.</p>
   <details><summary>Filter by originating business</summary><label className="input-label">Originating business code (optional)<input className="form-control" value={code} onChange={event=>{reset();setCode(event.target.value.toUpperCase());}} maxLength={16} disabled={busy}/></label><p className="form-text">This filters business IDs. Tracking codes always identify one record.</p></details>

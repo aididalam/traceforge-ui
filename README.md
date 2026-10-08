@@ -70,13 +70,17 @@ before it can appear. Publication is an operator action, not part of UI startup.
 | Variable | Purpose |
 | --- | --- |
 | `NEXT_PUBLIC_API_BASE_URL` | Empty uses the app's fixed same-origin public GET handlers. An external HTTPS API origin requires its own explicit CORS policy. |
-| `NEXT_PUBLIC_SITE_ORIGIN` | Optional canonical HTTPS site origin for QR generation. Empty uses the current page origin. |
+| `TRACEFORGE_SITE_ORIGIN` | Runtime canonical site origin for QR generation, copied tracking links and login Origin checks. Local loopback HTTP is supported. |
 | `TRACEFORGE_PUBLIC_API_ORIGIN` | Credential-free server API origin for the GET gateway. Required in production. Development defaults to `http://127.0.0.1:3000`. |
 
 All origins reject credentials, path prefixes, queries and fragments. Public
 configuration permits loopback HTTP in development only. The server upstream
 permits HTTP loopback for a colocated private API, and requires HTTPS otherwise.
-Public variables are embedded at build time; rebuild after changing them.
+The public API build variable is embedded at build time. The site domain is read
+at runtime: change `TRACEFORGE_SITE_ORIGIN` and restart the server/container,
+without rebuilding the image. `TRACEFORGE_OPERATOR_SITE_ORIGIN` remains a legacy
+alias; conflicting origins are rejected. With neither setting, local development
+uses the browser/request origin. Hosted login requires an explicit site origin.
 Never put operator credentials in public environment variables or browser storage.
 Operator login credentials are handled only by the separate session gateway.
 
@@ -87,10 +91,12 @@ NEXT_TELEMETRY_DISABLED=1 npm run build
 TRACEFORGE_PUBLIC_API_ORIGIN=http://127.0.0.1:3000 NEXT_TELEMETRY_DISABLED=1 npm start
 ```
 
-The server binds loopback port 3100. Hosting/HTTPS, CSP, deployment automation
-and a measured proxy rate-limit strategy are later delivery work. The current
-Fastify rate limiter sees requests through this gateway as one source IP and
-shares its 120/minute budget. Do not static-export this app: its public GET
+The development server binds loopback port 3100; the Docker image binds its private
+container interface. Parent-repository Compose provides the proxy and deployment
+configuration. An authenticated private proxy key forwards the real client IP for
+rate limiting; untrusted forwarding headers are ignored. Without that proxy
+configuration, requests through the gateway share one source's budget.
+Do not static-export this app: its public GET
 handlers need a Next Node runtime.
 
 ## Request and privacy boundary
@@ -121,7 +127,7 @@ the same as a full-ID lookup for legacy records. Batch views add a bounded
 holder read; available receipt pages load after the user chooses to inspect them.
 Codes are case-insensitive on input and displayed
 in lowercase. The short page keeps the full Tracking ID in Reference details.
-Copy tracking link uses this page's origin and validated `/s/<code>` path.
+Copy tracking link uses the runtime canonical origin and validated `/s/<code>` path.
 Refresh resolves again and hides unavailable/revoked records. Migration 007 is applied to the fresh local database. See
 [short-link design](https://github.com/aididalam/traceforge/blob/main/docs/public-short-links.md).
 
@@ -228,12 +234,14 @@ There is no unrestricted service credential or browser signing.
 | Server variable | Purpose |
 | --- | --- |
 | `TRACEFORGE_OPERATOR_API_ORIGIN` | Fixed credential-free API origin; required in production. Loopback HTTP is supported for a colocated API, HTTPS elsewhere. |
-| `TRACEFORGE_OPERATOR_SITE_ORIGIN` | Exact browser HTTPS origin for Origin/CSRF checks; local loopback HTTP is supported. Required for a deployed non-loopback site. |
+| `TRACEFORGE_SITE_ORIGIN` | Canonical browser origin shared by QR/links and Origin/CSRF checks. Required for hosted login. |
+| `TRACEFORGE_SESSION_STORE` | `memory` for local development, `mysql` for Docker deployment and restart-safe sessions. |
+| `TRACEFORGE_SESSION_KEY_FILE` | Private mounted 32-byte hex key used to encrypt upstream session credentials in MySQL. |
 
-The session store currently supports a single Next Node process and at most
-1,000 active browser sessions. Restarting Next signs users out. A shared session
-store, HTTPS deployment and proxy rate-limit/load checks are required before
-multi-instance hosting. Sessions expire after 30 minutes; restored/hidden views
+Docker deployment uses migration 012's shared MySQL session store. Upstream
+tokens are encrypted; the browser receives an opaque cookie handle. Sessions
+survive a UI restart. The local memory store supports one process and at most
+1,000 active browser sessions. Sessions expire after 30 minutes; restored/hidden views
 revalidate and clear revoked records. No passwords, API credentials or private
 records are persisted in localStorage/sessionStorage.
 

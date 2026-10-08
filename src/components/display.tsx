@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import type { PublicApiError } from "../lib/public-client";
+import { useSiteOrigin } from "./site-config";
 
 export const shortId = (value: string) => `${value.slice(0, 10)}…${value.slice(-6)}`;
 
@@ -34,6 +35,7 @@ export function HashValue({ label, value }: { label: string; value: string }) {
 }
 
 export function CopyTrackingLink({ path }: { path: string }) {
+  const origin = useSiteOrigin();
   const [status, setStatus] = useState<"ready" | "copied" | "failed">("ready");
   useEffect(() => {
     if (status !== "copied") return;
@@ -42,7 +44,7 @@ export function CopyTrackingLink({ path }: { path: string }) {
   }, [status]);
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(new URL(path, window.location.origin).href);
+      await navigator.clipboard.writeText(new URL(path, origin ?? window.location.origin).href);
       setStatus("copied");
     } catch { setStatus("failed"); }
   };

@@ -1,6 +1,7 @@
 import { publicQuantitySchema, routesSchema, holdersSchema, searchSchema, productQuery, validatePage } from "./product-contract";
 import { publicEntitySchema, publicTrackingSchema, publicShortLinkSchema, uint64, validateHistory } from "./public-contract";
 import { normalizeId, normalizeShortCode, publicOrigin } from "./urls";
+import {upstreamOrigin, gatewayHeaders} from './server-settings';
 
 // Server-only by import direction: only App Router GET handlers import this
 // module. No token/signer/DB dependencies, cookies or inbound headers are used.
@@ -13,9 +14,9 @@ async function readPublic(request: Request, path: string, validate: (body: unkno
   try {
     const configured = process.env.TRACEFORGE_PUBLIC_API_ORIGIN;
     if (!configured && process.env.NODE_ENV === "production") throw new Error("Public API origin is required.");
-    const origin = publicOrigin(configured ?? "http://127.0.0.1:3000", true);
+    const origin = upstreamOrigin(configured ?? "http://127.0.0.1:3000");
     const response = await fetch(`${origin}${path}`, {
-      method: "GET", headers: { Accept: "application/json" }, credentials: "omit", cache: "no-store",
+      method: "GET", headers: { Accept: "application/json", ...gatewayHeaders(request) }, credentials: "omit", cache: "no-store",
       redirect: "error", signal: AbortSignal.any([request.signal, AbortSignal.timeout(10000)]),
     });
     if (response.status === 404) return fail(404, "entity_not_found", "Entity was not found.");
