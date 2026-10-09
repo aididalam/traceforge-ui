@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
 import jsQR from "jsqr";
-import { operatorWrite, receiveLookup, operatorClient, OperatorError } from "../../lib/operator-client";
+import { operatorWrite, receiveLookup, operatorClient, OperatorError,operatorReceiptBatch } from "../../lib/operator-client";
 import { publicOrigin, trackingPath, shortPath } from "../../lib/urls";
 import type { ReceiveLookup, OperatorProduct, WriteResult } from "../../lib/operator-contract";
-import { createProductRequestSchema, receiveProductRequestSchema, removeProductRequestSchema } from "../../lib/operator-contract";
+import { createProductRequestSchema, receiveProductRequestSchema, removeProductRequestSchema,receiptBatchRequestSchema } from "../../lib/operator-contract";
 import { reasons, type RoutePage } from "../../lib/product-contract";
 import { SupplyChainStatus } from "../product-information";
 import { productDisplayName } from "../../lib/display-labels";
@@ -16,7 +16,7 @@ import { ReferenceLookup, trackingInput, formatCount } from "../reference-lookup
 import { StockSummary, RouteDetails } from "../product-stock";
 import { HashValue, useRetryWait } from "../display";
 import { useSiteOrigin } from "../site-config";
-const message=(status:string)=>status==="CONFIRMED"?"Confirmed. Product history will update shortly.":status==="FAILED"?"This operation failed. Refresh the product before trying again.":"Submitted. Awaiting confirmation. Retry the same request to check confirmation, or check Activity.";
+const message=(status:string)=>status==='WAITING_APPROVAL'?'Request sent. Awaiting the current owner’s approval. Stock will appear after the approved transfer is confirmed.':status==='APPROVING'?'Owner approved. Awaiting blockchain confirmation.':status==="CONFIRMED"?"Confirmed. Product history will update shortly.":['FAILED','DECLINED','CANCELLED','EXPIRED'].includes(status)?"This request did not complete. Check Receipt requests and refresh before trying again.":"Submitted. Awaiting confirmation. Retry the same request to check confirmation, or check Activity.";
 type Attempt={path:string;payload:Record<string,unknown>};
 function quantityNumber(value:string,max:string,min=1){if(!/^[1-9][0-9]*$/.test(value))return null;const n=Number(value);return Number.isSafeInteger(n)&&n>=min&&BigInt(value)<=BigInt(max)?n:null;}
 export function ReceiveProduct({initial="",organizationId}:{initial?:string;organizationId:string}) {
@@ -24,20 +24,21 @@ export function ReceiveProduct({initial="",organizationId}:{initial?:string;orga
  const router=useRouter();
  const [scanned,setScanned]=useState(initial),[product,setProduct]=useState<ReceiveLookup|null>(null),[confirmed,setConfirmed]=useState(false);
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState(""),[camera,setCamera]=useState(false),[routes,setRoutes]=useState<RoutePage|null>(null),[routeId,setRouteId]=useState(""),[amount,setAmount]=useState("1"),[attempt,setAttempt]=useState<Attempt|null>(null),[done,setDone]=useState(false),[retryAt,setRetryAt]=useState(0);
+ const [drafts,setDrafts]=useState<{trackingId:string;name:string;input:Record<string,unknown>}[]>([]),[bulkAttempt,setBulkAttempt]=useState<Record<string,unknown>|null>(null),[bulkNotice,setBulkNotice]=useState('');
  const wait=useRetryWait(retryAt),active=useRef<AbortController|null>(null),routeLock=useRef(false);
  const video=useRef<HTMLVideoElement|null>(null),stream=useRef<MediaStream|null>(null),timer=useRef<ReturnType<typeof setTimeout>|null>(null);
  const stop=()=>{stream.current?.getTracks().forEach(track=>track.stop());stream.current=null;if(timer.current)clearTimeout(timer.current);setCamera(false);};
  useEffect(()=>()=>{active.current?.abort();stream.current?.getTracks().forEach(track=>track.stop());if(timer.current)clearTimeout(timer.current);},[]);
  const reset=()=>{active.current?.abort();setProduct(null);setRoutes(null);setRouteId("");setConfirmed(false);setAttempt(null);setDone(false);setNotice("");};
  const lookup=async(value:string)=>{
-  if(busy||wait||attempt)return;reset();setBusy(true);const controller=new AbortController();active.current=controller;
+  if(busy||wait||attempt||bulkAttempt)return;reset();setBusy(true);const controller=new AbortController();active.current=controller;
   try{const found=await receiveLookup(value,controller.signal);if(controller.signal.aborted)return;setProduct(found);
    const page=found.routes&&found.page?{routes:found.routes,page:found.page}:null;setRoutes(page);
    const eligible=page?.routes.filter(r=>r.owner.id!==organizationId)??[];if(eligible.length===1&&!page?.page.hasMore)setRouteId(eligible[0].id);
   }catch(error){if(error instanceof OperatorError&&error.kind==="signedOut"){router.replace("/operator/sign-in");}if(!controller.signal.aborted){setNotice("Product unavailable. Check its Tracking ID or link and try again.");setRetryAt((error as {retryAt?:number}).retryAt??0);}}
   finally{if(active.current===controller)setBusy(false);}
  };
- const moreRoutes=async()=>{if(!product||!routes?.page.next||routeLock.current||wait||attempt)return;routeLock.current=true;setBusy(true);const controller=active.current!;
+ const moreRoutes=async()=>{if(!product||!routes?.page.next||routeLock.current||wait||attempt||bulkAttempt)return;routeLock.current=true;setBusy(true);const controller=active.current!;
   try{const result=await operatorClient.routes(product.trackingId,routes.page.next,controller.signal);if(!controller.signal.aborted)setRoutes(old=>({...result,routes:[...(old?.routes??[]),...result.routes.filter(r=>!old?.routes.some(o=>o.id===r.id))]}));}
   catch(error){if(error instanceof OperatorError&&error.kind==="signedOut"){router.replace("/operator/sign-in");}if(!controller.signal.aborted){setNotice("More receipts could not be loaded. Try again shortly.");setRetryAt((error as {retryAt?:number}).retryAt??0);}}
   finally{routeLock.current=false;if(!controller.signal.aborted)setBusy(false);}
@@ -58,32 +59,50 @@ export function ReceiveProduct({initial="",organizationId}:{initial?:string;orga
 
  const selected=routes?.routes.find(r=>r.id===routeId),isBatch=product?.quantity?.isBatch===true;
  const n=quantityNumber(amount,selected?.availableQuantity??"1");
+ const addToList=()=>{
+  if(!product||busy||attempt||bulkAttempt||!confirmed||!product.canReceive||drafts.length>=100||isBatch&&(!selected||n===null))return;
+  if(drafts.some(d=>d.trackingId===product.trackingId&&d.input.sourceRouteId===(isBatch?selected!.id:undefined))){setNotice('This product and source are already in your request list.');return;}
+  const input=receiveProductRequestSchema.parse({version:isBatch?selected!.version:product.version,confirmed:true,idempotencyKey:crypto.randomUUID(),...(isBatch?{sourceRouteId:selected!.id,quantity:n}:{})});
+  setDrafts(old=>[...old,{trackingId:product.trackingId,name:productDisplayName(product.name)??'Product',input}]);reset();setScanned('');
+ };
+ const sendList=async()=>{
+  if(busy||wait||!drafts.length)return;
+  const payload=bulkAttempt??receiptBatchRequestSchema.parse({requests:drafts.map(d=>({trackingId:d.trackingId,...d.input}))});
+  setBulkAttempt(payload);setBusy(true);setBulkNotice('');
+  try{const response=await operatorReceiptBatch(payload),accepted=response.results.filter(r=>r.ok).length;
+   const failed=response.results.map((r,i)=>r.ok?null:`${drafts[i]?.name??'Product'}: ${r.error?.code==='quantity_exceeds_available'?'not enough available stock':'refresh the product and request again'}`).filter(Boolean);
+   setBulkNotice(`${accepted} request${accepted===1?'':'s'} sent for owner approval.${failed.length?' '+failed.join('; ')+'.':''}`);setDrafts([]);setBulkAttempt(null);
+  }catch(error){if(error instanceof OperatorError&&error.kind==='signedOut')router.replace('/operator/sign-in');setRetryAt((error as {retryAt?:number}).retryAt??0);setBulkNotice('Request results are unavailable. Retry this same list or check My requests.');}
+  finally{setBusy(false);}
+ };
  const receive=async()=>{
-  if(!product||busy||wait||done||(!attempt&&(!confirmed||!product.canReceive||(isBatch&&(!selected||selected.owner.id===organizationId||n===null)))))return;
+  if(!product||busy||wait||done||bulkAttempt||(!attempt&&(!confirmed||!product.canReceive||(isBatch&&(!selected||selected.owner.id===organizationId||n===null)))))return;
   const current=attempt??{path:`products/${product.trackingId}/receive`,payload:receiveProductRequestSchema.parse({version:isBatch?selected!.version:product.version,confirmed:true,idempotencyKey:crypto.randomUUID(),...(isBatch?{sourceRouteId:selected!.id,quantity:n}:{})})};
   setAttempt(current);setBusy(true);setNotice("");
-  try{const result=await operatorWrite(current.path,current.payload);setNotice(message(result.status));if(result.status==="CONFIRMED"){setDone(true);setProduct({...product,canReceive:false});}else if(result.status==="FAILED")setDone(true);}
+  try{const result=await operatorWrite(current.path,current.payload);setNotice(message(result.status));if(['WAITING_APPROVAL','APPROVING','CONFIRMED'].includes(result.status)){setDone(true);setProduct({...product,canReceive:false});}else if(['FAILED','DECLINED','CANCELLED','EXPIRED'].includes(result.status))setDone(true);}
   catch(error){if(error instanceof OperatorError&&error.kind==="signedOut"){router.replace("/operator/sign-in");}setRetryAt((error as {retryAt?:number}).retryAt??0);setNotice(error instanceof OperatorError&&error.kind==="invalid"?"Stock changed or this request was rejected. Refresh before making a new request.":"Confirmation unavailable. Check Activity, or retry this same request.");if(error instanceof OperatorError&&error.kind==="invalid")setDone(true);}
   finally{setBusy(false);}
  };
- return <section className="panel operator-panel"><h2>Receive a product</h2><p>Confirm receipt only after the products are physically with your business.</p>
-  <ReferenceLookup operator initial={scanned} busy={busy||!!attempt||wait>0} onSelect={lookup} onReset={reset}/>
-  <button className="btn btn-outline-secondary" type="button" onClick={()=>void scan()} disabled={busy||camera||!!attempt||wait>0}>Scan QR with camera</button>
+ return <section className="panel operator-panel"><h2>Receive products</h2><p>Scan after physical handover and request the current owner&apos;s approval. You can add several products to a request list.</p>
+  <ReferenceLookup operator initial={scanned} busy={busy||!!attempt||!!bulkAttempt||wait>0} onSelect={lookup} onReset={reset}/>
+  <button className="btn btn-outline-secondary" type="button" onClick={()=>void scan()} disabled={busy||camera||!!attempt||!!bulkAttempt||wait>0}>Scan QR with camera</button>
   {camera&&<><video ref={video} muted playsInline aria-label="QR scanner" style={{width:"100%",maxWidth:400}}/><button className="btn btn-outline-secondary" onClick={stop}>Stop camera</button></>}
   {product&&<div className="receipt-preview"><h3>{productDisplayName(product.name)??"Product details not shared"}</h3>{product.quantity?.externalId&&<p>Product / batch ID: <strong>{product.quantity.externalId}</strong></p>}
    <p><SupplyChainStatus closed={product.closed}/></p>{product.quantity&&<StockSummary quantity={product.quantity}/>}
    {!isBatch&&<p>Current holder: {product.holder?.name??"Business name not shared"}</p>}
-   {isBatch&&routes&&<fieldset disabled={busy||!!attempt}><legend>Choose the receipt you are receiving from</legend><p>Choose the business handing you these items. Separate deliveries at the same business have separate receipts.</p>
+   {isBatch&&routes&&<fieldset disabled={busy||!!attempt||!!bulkAttempt}><legend>Choose the receipt you are receiving from</legend><p>Choose the business handing you these items. Separate deliveries at the same business have separate receipts.</p>
     <ul className="selection-list">{routes.routes.map(route=><li key={route.id}><div className="form-check"><input className="form-check-input" id={`source-${route.id}`} type="radio" name="source-receipt" value={route.id} checked={routeId===route.id} disabled={route.owner.id===organizationId} onChange={()=>{setRouteId(route.id);setConfirmed(false);setAmount("1");}}/><label className="form-check-label" htmlFor={`source-${route.id}`}>{route.owner.name??"Business name not shared"}{route.owner.id===organizationId?" (your business)":""}</label></div><RouteDetails route={route}/></li>)}</ul>
     {routes.page.hasMore&&<button type="button" className="btn btn-outline-secondary" onClick={()=>void moreRoutes()} disabled={wait>0}>Show more receipts</button>}
     {selected&&<label className="input-label">Number of items received<input className="form-control" type="number" min="1" step="1" max={selected.availableQuantity} value={amount} onChange={event=>{setAmount(event.target.value);setConfirmed(false);}}/></label>}
     {selected&&n===null&&<p role="alert">Enter a whole number from 1 to {formatCount(selected.availableQuantity)}.</p>}
    </fieldset>}
-   {product.canReceive&&!done&&<div className="receipt-actions"><div className="form-check"><input className="form-check-input" id="confirm-receipt" type="checkbox" checked={confirmed} disabled={busy||!!attempt} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-receipt">I have physically received this product</label></div><button className="btn btn-primary" onClick={()=>void receive()} disabled={busy||wait>0||(!attempt&&(!confirmed||(isBatch&&(!selected||n===null))))}>{busy?"Receiving…":attempt?"Check confirmation":"Receive into my inventory"}</button></div>}
+   {product.canReceive&&!done&&<div className="receipt-actions"><div className="form-check"><input className="form-check-input" id="confirm-receipt" type="checkbox" checked={confirmed} disabled={busy||!!attempt||!!bulkAttempt} onChange={event=>setConfirmed(event.target.checked)}/><label className="form-check-label" htmlFor="confirm-receipt">I have physically received this product</label></div><div className='d-flex flex-wrap gap-2'><button className="btn btn-primary" onClick={()=>void receive()} disabled={busy||wait>0||!!bulkAttempt||(!attempt&&(!confirmed||(isBatch&&(!selected||n===null))))}>{busy?"Sending request…":attempt?"Check request":"Request to receive"}</button><button className='btn btn-outline-secondary' disabled={busy||!!attempt||!!bulkAttempt||!confirmed||drafts.length>=100||isBatch&&(!selected||n===null)} onClick={addToList}>Add to request list</button></div></div>}
    {!product.closed&&!product.canReceive&&!done&&<p>{isBatch?"No other business has available stock on this page. Load more receipts if available.":"Already with your business."}</p>}
-   {!attempt&&<button className="btn btn-outline-secondary" type="button" disabled={busy||wait>0} onClick={()=>void lookup(product.trackingId)}>Refresh product</button>}
+   {!attempt&&<button className="btn btn-outline-secondary" type="button" disabled={busy||!!bulkAttempt||wait>0} onClick={()=>void lookup(product.trackingId)}>Refresh product</button>}
    {done&&<button className="btn btn-outline-secondary" type="button" disabled={busy||wait>0} onClick={()=>{setAttempt(null);reset();}}>Receive another product</button>}
-   <Link href={`/operator/products/${product.trackingId}`} prefetch={false}>View product history</Link><p className="form-text">Private product history is available only to businesses that have handled it.</p></div>}
+   <Link href='/operator/requests' prefetch={false}>Check receipt requests</Link><p className="form-text">Private product history becomes available after the approved receipt is recorded.</p></div>}
+  {drafts.length>0&&<div className='border rounded p-3 mt-3'><h3>Request list ({drafts.length} / 100)</h3><ul className='list-group mb-3'>{drafts.map((d,index)=><li className='list-group-item d-flex justify-content-between align-items-center gap-2' key={String(d.input.idempotencyKey)}><span>{d.name} · {formatCount(String(d.input.quantity??1))} item{Number(d.input.quantity??1)===1?'':'s'}</span><button className='btn btn-sm btn-outline-secondary' disabled={busy||!!bulkAttempt} onClick={()=>setDrafts(old=>old.filter((_,i)=>i!==index))}>Remove</button></li>)}</ul><button className='btn btn-primary' disabled={busy||wait>0} onClick={()=>void sendList()}>{busy?'Sending requests…':bulkAttempt?'Retry request list':`Send ${drafts.length} requests`}</button></div>}
+  {bulkNotice&&<p role='status' className='mt-3'>{bulkNotice} <Link href='/operator/requests' prefetch={false}>Check My requests</Link></p>}
   {notice&&<p role="status">{notice}{wait?` Try again in ${wait}s.`:""}</p>}
  </section>;
 }

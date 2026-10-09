@@ -16,6 +16,42 @@ async function signIn(spy:ReturnType<typeof vi.fn<typeof fetch>>,previousCookie?
  return cookie.split(";")[0];
 }
 describe("operator gateway session boundary",()=>{
+ it('protects bulk receipt decisions and rejects mismatched result identities',async()=>{
+  const spy=vi.fn<typeof fetch>();vi.stubGlobal('fetch',spy);const cookie=await signIn(spy);
+  const requestId='12345678-1234-4234-8234-123456789def',trackingId=operatorHistory.product.id;
+  const input={requestIds:[requestId],action:'approve',idempotencyKey:'approval-test-001'};
+  spy.mockClear();
+  for(const invalid of [{...input,requestIds:[]},{...input,requestIds:[requestId,requestId]},
+   {...input,requestIds:Array(101).fill(requestId)},{...input,quantity:999},{...input,owner:operatorUser.organizationId}])
+   expect((await operatorGateway(request('request-decisions',invalid,cookie),'request-decisions')).status).toBe(400);
+  const crossOrigin=new Request(origin+'/operator/api/receipt-requests/decisions',{method:'POST',headers:{Origin:'https://evil.example','Content-Type':'application/json',Cookie:cookie},body:JSON.stringify(input)});
+  expect((await operatorGateway(crossOrigin,'request-decisions')).status).toBe(403);expect(spy).not.toHaveBeenCalled();
+  const result={operationId:requestId,receiptRequestId:requestId,trackingId,status:'APPROVING',quantity:'1',transactionHash:null,blockNumber:null};
+  const valid={results:[{requestId,ok:true,result,error:null}]};spy.mockResolvedValue(response(valid,202));
+  expect((await operatorGateway(request('request-decisions',input,cookie),'request-decisions')).status).toBe(202);
+  expect(spy.mock.calls.at(-1)?.[0]).toBe('https://api.example/operator/v1/receipt-requests/decisions');
+  for(const invalid of [{results:[]},{results:[{...valid.results[0],result:{...result,receiptRequestId:'12345678-1234-4234-8234-123456789abc'}}]},
+   {results:[{...valid.results[0],result:{...result,privateKey:'SECRET'}}]},
+   {results:[{...valid.results[0],result:{...result,quantity:'0'}}]}]){
+   spy.mockResolvedValue(response(invalid,202));const rejected=await operatorGateway(request('request-decisions',input,cookie),'request-decisions');expect(rejected.status).toBe(503);expect(await rejected.text()).not.toContain('SECRET');
+  }
+ });
+ it('validates requester wallet addresses and bulk request result product identities',async()=>{
+  const spy=vi.fn<typeof fetch>();vi.stubGlobal('fetch',spy);const cookie=await signIn(spy);
+  const id=operatorHistory.product.id,requestId='12345678-1234-4234-8234-123456789def';
+  const business={id:operatorUser.organizationId,name:'Business',walletAddress:'0x'+'ab'.repeat(20)};
+  const receipt={id:requestId,trackingId:id,name:'Product',source:business,requester:business,sourceRouteId:null,quantity:'1',status:'WAITING_APPROVAL',createdAt:'2026-10-10T00:00:00.000Z',expiresAt:'2026-10-13T00:00:00.000Z',transactionHash:null,errorCode:null};
+  spy.mockResolvedValue(response({requests:[receipt],page:{hasMore:false,next:null}}));
+  expect((await operatorGateway(request('receipt-requests?direction=incoming',undefined,cookie),'requests')).status).toBe(200);
+  spy.mockResolvedValue(response({requests:[{...receipt,requester:{...business,walletAddress:'0x123'}}],page:{hasMore:false,next:null}}));
+  expect((await operatorGateway(request('receipt-requests',undefined,cookie),'requests')).status).toBe(503);
+  const input={requests:[{trackingId:id,version:'0',confirmed:true,idempotencyKey:'batch-request-001'}]};
+  const result={operationId:requestId,receiptRequestId:requestId,trackingId:id,status:'WAITING_APPROVAL',quantity:'1',transactionHash:null,blockNumber:null};
+  spy.mockResolvedValue(response({results:[{trackingId:id,ok:true,result,error:null}]},202));
+  expect((await operatorGateway(request('receipt-requests',input,cookie),'request-batch')).status).toBe(202);
+  spy.mockResolvedValue(response({results:[{trackingId:id,ok:true,result:{...result,trackingId:'0x'+'ff'.repeat(32)},error:null}]},202));
+  expect((await operatorGateway(request('receipt-requests',input,cookie),'request-batch')).status).toBe(503);
+ });
  it("validates dynamic product fields and forwards substantial JSON only on the create route",async()=>{
   const spy=vi.fn<typeof fetch>();vi.stubGlobal("fetch",spy);const cookie=await signIn(spy);
   const base={id:"A / P-001",name:"Product",description:"",publish:false,idempotencyKey:"synthetic-create-1234"};
@@ -39,9 +75,9 @@ describe("operator gateway session boundary",()=>{
   for(const invalid of [{...body,confirmed:false},{...body,organizationId:operatorUser.organizationId},{...body,version:"18446744073709551616"}])expect((await operatorGateway(request("receive",invalid,cookie),"receive",id)).status).toBe(400);
   expect((await operatorGateway(request("close",{reason:"Sold",confirmed:true,idempotencyKey:"synthetic-request-1234"}),"close",id)).status).toBe(401);
   expect(spy).not.toHaveBeenCalled();
-  const result={operationId:"12345678-1234-4234-8234-123456789def",status:"CONFIRMED",transactionHash:"0x"+"44".repeat(32),blockNumber:"12",trackingId:id};
-  spy.mockResolvedValue(response(result));
-  expect((await operatorGateway(request("receive",body,cookie),"receive",id)).status).toBe(200);
+  const result={operationId:"12345678-1234-4234-8234-123456789def",receiptRequestId:"12345678-1234-4234-8234-123456789def",status:"WAITING_APPROVAL",transactionHash:null,blockNumber:null,trackingId:id,quantity:"1"};
+  spy.mockResolvedValue(response(result,202));
+  expect((await operatorGateway(request("receive",body,cookie),"receive",id)).status).toBe(202);
   expect(spy.mock.calls.at(-1)?.[0]).toBe("https://api.example/operator/v1/products/"+id+"/receive");
   expect(spy.mock.calls.at(-1)?.[1]?.body).toBe(JSON.stringify(body));
   expect(spy.mock.calls.at(-1)?.[1]?.headers).toMatchObject({Authorization:"Bearer "+token});

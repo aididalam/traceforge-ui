@@ -30,7 +30,7 @@ const server = createServer((request, reply) => {
     if(url.pathname===`/operator/v1/products/${batchId}/receive`||url.pathname===`/operator/v1/products/${batchId}/remove`){
       let data="";request.on("data",chunk=>data+=chunk);request.on("end",()=>{let body;try{body=JSON.parse(data);}catch{return send(400,{})}
        if(!body.confirmed||!body.version||!body.idempotencyKey)return send(400,{});
-       if(url.pathname.endsWith("receive"))return send(200,{...writeResult,receivedRouteId:"0x"+"c1".repeat(32),quantity:String(body.quantity)});
+       if(url.pathname.endsWith("receive"))return send(202,{...writeResult,receiptRequestId:"12345678-1234-4234-8234-123456789abc",status:"WAITING_APPROVAL",transactionHash:null,blockNumber:null,receivedRouteId:"0x"+"c1".repeat(32),quantity:String(body.quantity)});
        return send(200,{...writeResult,removedQuantity:String(body.quantity),reason:body.reason,reasonText:body.reasonText});
       });return;
     }
@@ -39,10 +39,12 @@ const server = createServer((request, reply) => {
         let body;try{body=JSON.parse(data);}catch{return send(400,{});}
         if(!body.idempotencyKey)return send(400,{});
         if(!url.pathname.endsWith("create")&&!body.confirmed)return send(400,{});
+        if(url.pathname.endsWith("receive"))return send(202,{operationId:"12345678-1234-4234-8234-123456789abc",receiptRequestId:"12345678-1234-4234-8234-123456789abc",status:"WAITING_APPROVAL",transactionHash:null,blockNumber:null,trackingId:operatorProduct.id,quantity:"1"});
         return send(200,{operationId:"12345678-1234-4234-8234-123456789abc",status:"CONFIRMED",transactionHash:"0x"+"55".repeat(32),blockNumber:"42",trackingId:operatorProduct.id,...(url.pathname.endsWith("create")?{shortCode:"abc123xyz789"}:{})});
       });return;
     }
     if(request.method!=="GET")return send(405,{});
+    if(url.pathname==="/operator/v1/receipt-requests")return send(200,{requests:[],page:{hasMore:false,next:null}});
     if(url.pathname===`/operator/v1/receive/${batchId}`||url.pathname===`/operator/v1/receive/${batchCode}`)return send(200,batchPreview);
     if(url.pathname===`/operator/v1/products/${batchId}/history`)return send(200,batchHistory);
     if(url.pathname===`/operator/v1/products/${batchId}/routes`)return send(200,url.searchParams.get("after")==="0"?firstRoutePage:secondRoutePage);

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { uint64, quantitySchema, routesSchema, numericPage, itemQuantity, referenceId, businessCode, shortCode, hash, removalReason, reasonText, operatorMovementSchema } from "./product-contract";
 const id=z.string().regex(/^0x[0-9a-fA-F]{64}$/).transform(value=>value.toLowerCase());
-const uuid=z.string().uuid();
+const uuid=z.string().uuid().transform(value=>value.toLowerCase());
 const label=z.string().max(240).nullable();
 export const operatorUserSchema=z.strictObject({accountId:uuid,email:z.string().email().max(254),name:z.string().min(1).max(120),
   tenantId:id,organizationId:id,workspaceName:label,organizationName:label,businessCode:businessCode.nullable().optional(),access:z.literal("manage")});
@@ -38,9 +38,21 @@ export const removeProductRequestSchema=z.strictObject({version:uint64,confirmed
  .refine(r=>r.reason==="Sold"||r.reasonText.trim().length>0,"Please explain this removal.");
 const writeBase=z.strictObject({operationId:uuid,status:z.enum(["PREPARED","BROADCAST","CONFIRMED","FAILED"]),transactionHash:id,blockNumber:uint64.nullable(),trackingId:id});
 export const createWriteResultSchema=writeBase.extend({shortCode:shortCode.nullable().optional()}).refine(r=>r.status!=="CONFIRMED"||r.shortCode!==null);
-export const receiveWriteResultSchema=writeBase.extend({receivedRouteId:hash.optional(),quantity:uint64.optional()});
+export const receiptStatus=z.enum(['WAITING_APPROVAL','APPROVING','CONFIRMED','DECLINED','CANCELLED','EXPIRED','FAILED']);
+const positiveCount=uint64.refine(value=>BigInt(value)>0n&&BigInt(value)<=BigInt(Number.MAX_SAFE_INTEGER));
+export const receiveWriteResultSchema=z.strictObject({operationId:uuid,receiptRequestId:uuid,status:receiptStatus,transactionHash:id.nullable(),blockNumber:uint64.nullable(),trackingId:id,receivedRouteId:hash.optional(),quantity:positiveCount});
 export const removeWriteResultSchema=writeBase.extend({removedQuantity:uint64.optional(),reason:removalReason.optional(),reasonText:reasonText.optional()});
-export const businessWriteResultSchema=writeBase.extend({shortCode:shortCode.nullable().optional(),receivedRouteId:hash.optional(),quantity:uint64.optional(),removedQuantity:uint64.optional(),reason:removalReason.optional(),reasonText:reasonText.optional()});
+export const businessWriteResultSchema=z.strictObject({operationId:uuid,receiptRequestId:uuid.optional(),status:z.enum(['PREPARED','BROADCAST','CONFIRMED','FAILED','WAITING_APPROVAL','APPROVING','DECLINED','CANCELLED','EXPIRED']),transactionHash:id.nullable(),blockNumber:uint64.nullable(),trackingId:id,shortCode:shortCode.nullable().optional(),receivedRouteId:hash.optional(),quantity:uint64.optional(),removedQuantity:uint64.optional(),reason:removalReason.optional(),reasonText:reasonText.optional()});
+const wallet=z.string().regex(/^0x[0-9a-fA-F]{40}$/).transform(v=>v.toLowerCase());
+const receiptBusiness=z.strictObject({id,name:label,walletAddress:wallet.nullable()});
+export const receiptRequestSchema=z.strictObject({id:uuid,trackingId:id,name:label,source:receiptBusiness,requester:receiptBusiness.extend({walletAddress:wallet}),sourceRouteId:hash.nullable(),quantity:positiveCount,status:receiptStatus,createdAt:z.string().datetime(),expiresAt:z.string().datetime(),transactionHash:id.nullable(),errorCode:z.string().max(64).nullable()});
+export const receiptRequestsSchema=z.strictObject({requests:z.array(receiptRequestSchema).max(100),page});
+const receiptError=z.strictObject({code:z.string().max(64)});
+export const receiptDecisionsRequestSchema=z.strictObject({requestIds:z.array(uuid).min(1).max(100).refine(ids=>new Set(ids).size===ids.length),action:z.enum(['approve','decline','cancel']),idempotencyKey:key});
+export const receiptDecisionsResultSchema=z.strictObject({results:z.array(z.strictObject({requestId:uuid,ok:z.boolean(),result:receiveWriteResultSchema.nullable(),error:receiptError.nullable()}).refine(r=>r.ok?r.result!==null&&r.error===null&&r.result.receiptRequestId===r.requestId:r.result===null&&r.error!==null)).min(1).max(100)});
+export const receiptBatchRequestSchema=z.strictObject({requests:z.array(receiveProductRequestSchema.extend({trackingId:id})).min(1).max(100)});
+export const receiptBatchResultSchema=z.strictObject({results:z.array(z.strictObject({trackingId:id,ok:z.boolean(),result:receiveWriteResultSchema.nullable(),error:receiptError.nullable()}).refine(r=>r.ok?r.result!==null&&r.error===null&&r.result.trackingId===r.trackingId:r.result===null&&r.error!==null)).min(1).max(100)});
+export type ReceiptRequest=z.infer<typeof receiptRequestSchema>;
 export const receiveLookupSchema=z.strictObject({trackingId:id,name:label,holder:z.strictObject({id,name:label}).nullable(),closed:z.boolean(),version:uint64.nullable(),canReceive:z.boolean(),quantity:quantitySchema.optional(),routes:routesSchema.shape.routes.optional(),page:numericPage.optional()})
  .refine(p=>p.quantity?.isBatch? p.holder===null&&p.version===null&&p.routes!==undefined&&p.page!==undefined : p.holder!==null&&p.version!==null);
 export type ReceiveLookup=z.infer<typeof receiveLookupSchema>;

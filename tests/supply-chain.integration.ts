@@ -5,7 +5,7 @@ import {randomUUID} from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
 import jsQR from "jsqr";
 const manifest=process.env.TRACEFORGE_INTEGRATION_MANIFEST;
-if(!manifest)throw Error("Start this suite through TRACEFORGE_TEST_UI=true npm run test:direct-claim in api/. It requires the disposable integration chain and database.");
+if(!manifest)throw Error("Start this suite through TRACEFORGE_TEST_UI=true npm run test:receipt-approval in api/. It requires the disposable integration chain and database.");
 const fixture=JSON.parse(readFileSync(manifest,"utf8"));
 type Product={trackingId:string;shortCode:string;rootRouteId?:string};
 type Proof={rootRouteId:string;routes:{id:string;owner:string;available:string;parent:string}[]};
@@ -30,11 +30,14 @@ async function verify(product:Product,available:number,removed:number,extra:Reco
  product.rootRouteId??=proof.rootRouteId;return proof;
 }
 async function write(page:Page,name:string,suffix:string){
- for(let attempt=0;attempt<3;attempt++){
+ for(let attempt=0;attempt<5;attempt++){
   await rateWait(page);const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith(suffix)&&r.request().method()==="POST");
   const target=attempt?button(page,"Check confirmation"):button(page,name);await expect(target).toBeEnabled();await target.click();
   const r=await response;if(r.status()===429){await rateWait(page);continue;}
-  expect(r.status(),await r.text()).toBe(200);const result=await r.json();expect(result.status).toBe("CONFIRMED");
+  if(r.status()===503){console.log('Browser retries the same unavailable write');await page.waitForTimeout(2000);continue;}
+  expect(r.status(),await r.text()).toBe(200);const result=await r.json();
+  if(['PREPARED','BROADCAST'].includes(result.status)){console.log('Browser checks the same pending write');await page.waitForTimeout(2000);continue;}
+  expect(result.status).toBe("CONFIRMED");
   expect(r.request().headers().authorization).toBeUndefined();await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();return result;
  }throw Error("Write exhausted real rate-limit retries");
 }
@@ -58,10 +61,32 @@ async function lookup(page:Page,product:Product,search?:{id:string;name:string})
   }catch(error){if(!(throttled.get(page)!>Date.now()))throw error;await rateWait(page);}
  }throw Error("Lookup failed after Retry-After");
 }
-async function receive(page:Page,product:Product,source?:string,quantity=1,search?:{id:string;name:string}){
+async function receive(page:Page,ownerPage:Page,product:Product,source?:string,quantity=1,search?:{id:string;name:string}){
  await lookup(page,product,search);if(source){await page.locator("#source-"+source).check();await label(page,"Number of items received").fill(String(quantity));}
  else await expect(label(page,"Number of items received")).toHaveCount(0);
- await label(page,"I have physically received this product").check();return write(page,"Receive into my inventory","/receive");
+ await label(page,"I have physically received this product").check();
+ const response=page.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/receive')&&r.request().method()==='POST');
+ await button(page,'Request to receive').click();const requested=await response;expect(requested.status()).toBe(202);const pending=await requested.json();expect(pending.status).toBe('WAITING_APPROVAL');
+ await expect(page.getByRole('status').filter({hasText:'Awaiting the current owner'})).toBeVisible();
+ await dashboard(ownerPage,'/operator/requests');
+ const card=ownerPage.locator('article').filter({hasText:pending.receiptRequestId});await expect(card).toBeVisible();
+ await expect(card).toContainText('Requester wallet address');await expect(card).toContainText('Business Organization ID');
+ await card.getByRole('checkbox').check();console.log('Owner receipt selected '+pending.receiptRequestId);await accessible(ownerPage);console.log('Owner receipt accessibility verified '+pending.receiptRequestId);
+ let queued=false;
+ for(let attempt=0;attempt<3;attempt++){
+  await rateWait(ownerPage);const decided=ownerPage.waitForResponse(r=>new URL(r.url()).pathname.endsWith('/receipt-requests/decisions')&&r.request().method()==='POST');
+  await button(ownerPage,'Approve selected (1)').click();const approved=await decided;
+  if(approved.status()===429){await rateWait(ownerPage);continue;}
+  expect(approved.status()).toBe(202);const decision=await approved.json();
+  if(decision.results[0].ok){queued=true;break;}
+  const code=decision.results[0].error?.code;
+  expect(['chain_unavailable','business_busy','request_unavailable'],JSON.stringify(decision)).toContain(code);
+  console.log('Owner decision retry: '+code);await ownerPage.waitForTimeout(2000);
+  await button(ownerPage,'Refresh requests').click();await card.getByRole('checkbox').check();
+ }
+ expect(queued,'Owner approval must queue within bounded retries').toBe(true);console.log('Owner decision queued '+pending.receiptRequestId);
+ for(let i=0;i<20;i++){await button(ownerPage,'Refresh requests').click();if(await card.getByText('Received',{exact:true}).count())break;await ownerPage.waitForTimeout(2000);}
+ await expect(card.getByText('Received',{exact:true})).toBeVisible();return pending;
 }
 async function remove(page:Page,product:Product,route:string|undefined,quantity:number,reason="Sold",text=""){
  await dashboard(page,"/operator/products/"+product.trackingId);
@@ -87,18 +112,18 @@ test("real chain: registration, partial receipts, returns, removals, tracking an
   }
   const [producer,distributor,shop]=pages,id="UI-BATCH-"+randomUUID(),name=info.project.name+" browser batch";
   const single=await create(producer,"Browser single "+info.project.name,"SERIAL-"+randomUUID());
-  await receive(distributor,single);await verify(single,1,0);await remove(distributor,single,undefined,1,"Damaged","Broken during delivery");await verify(single,0,1,{reasons:{Damaged:"1"}});
+  await receive(distributor,producer,single);await verify(single,1,0);await remove(distributor,single,undefined,1,"Damaged","Broken during delivery");await verify(single,0,1,{reasons:{Damaged:"1"}});
   await dashboard(distributor,"/operator/products/"+single.trackingId);await expect(distributor.locator(".operator-product-summary .supply-chain-status")).toHaveText("Out of supply chain");await expect(distributor.locator("h1")).not.toContainText(/sold/i);
   await expect(distributor.locator(".operator-timeline li")).toHaveCount(3);await expect(distributor.locator(".operator-timeline")).toContainText("Broken during delivery");
   const batch=await create(producer,name,id,1000000),duplicate=await create(producer,"Other match "+info.project.name,id,2);
   expect(batch.trackingId).not.toBe(duplicate.trackingId);expect(batch.shortCode).not.toBe(duplicate.shortCode);
-  const d=await receive(distributor,batch,batch.rootRouteId,600000,{id,name});await verify(batch,1000000,0,{owned:{0:400000,1:600000}});
-  const s=await receive(shop,batch,batch.rootRouteId,400000);await verify(batch,1000000,0,{owned:{0:0,1:600000,2:400000}});
-  const s2=await receive(shop,batch,d.receivedRouteId,250000);await verify(batch,1000000,0,{owned:{1:350000,2:650000}});
-  const back=await receive(producer,batch,s2.receivedRouteId,50000);await verify(batch,1000000,0,{owned:{0:50000,1:350000,2:600000}});
-  const d2=await receive(distributor,batch,s.receivedRouteId,100000);await verify(batch,1000000,0,{owned:{0:50000,1:450000,2:500000}});
+  const d=await receive(distributor,producer,batch,batch.rootRouteId,600000,{id,name});await verify(batch,1000000,0,{owned:{0:400000,1:600000}});
+  const s=await receive(shop,producer,batch,batch.rootRouteId,400000);await verify(batch,1000000,0,{owned:{0:0,1:600000,2:400000}});
+  const s2=await receive(shop,distributor,batch,d.receivedRouteId,250000);await verify(batch,1000000,0,{owned:{1:350000,2:650000}});
+  const back=await receive(producer,shop,batch,s2.receivedRouteId,50000);await verify(batch,1000000,0,{owned:{0:50000,1:350000,2:600000}});
+  const d2=await receive(distributor,shop,batch,s.receivedRouteId,100000);await verify(batch,1000000,0,{owned:{0:50000,1:450000,2:500000}});
   await lookup(shop,batch);await expect(shop.locator("#source-"+s.receivedRouteId)).toBeDisabled();
-  await shop.locator("#source-"+d.receivedRouteId).check();await label(shop,"Number of items received").fill("350001");await label(shop,"I have physically received this product").check();await expect(button(shop,"Receive into my inventory")).toBeDisabled();await accessible(shop);
+  await shop.locator("#source-"+d.receivedRouteId).check();await label(shop,"Number of items received").fill("350001");await label(shop,"I have physically received this product").check();await expect(button(shop,"Request to receive")).toBeDisabled();await accessible(shop);
   await remove(shop,batch,s.receivedRouteId,100000);await verify(batch,900000,100000,{reasons:{Sold:100000}});
   await remove(shop,batch,s2.receivedRouteId,200,"Lost","পরিবহনের সময় হারিয়েছে");await verify(batch,899800,100200,{reasons:{Sold:100000,Lost:200}});
   await remove(distributor,batch,d2.receivedRouteId,500,"Spoiled","Packaging damaged during storage");await verify(batch,899300,100700,{owned:{0:50000,1:449500,2:399800},reasons:{Sold:100000,Lost:200,Spoiled:500}});
@@ -126,7 +151,7 @@ test("real chain: registration, partial receipts, returns, removals, tracking an
   }
   await dashboard(producer,"/operator/products/"+batch.trackingId);await expect(producer.getByText("1 out of 1,000,000 available",{exact:true})).toBeVisible();await expect(producer.getByRole("heading",{name:"Batch availability",exact:true})).toBeVisible();await expect(producer.locator(".operator-product-summary .supply-chain-status")).toHaveText("In supply chain");
   await remove(producer,batch,back.receivedRouteId,1);await verify(batch,0,1000000);await dashboard(producer,"/operator/products/"+batch.trackingId);await expect(producer.locator(".operator-product-summary .supply-chain-status")).toHaveText("Out of supply chain");await expect(button(producer,"Remove from supply chain")).toHaveCount(0);
-  await lookup(distributor,batch);await expect(button(distributor,"Receive into my inventory")).toHaveCount(0);
-  expect(await control("/rebuild")).toMatchObject({equal:true,tables:5});expect(errors).toEqual([]);
- }finally{for(const context of contexts)await context.close();}
+  await lookup(distributor,batch);await expect(button(distributor,"Request to receive")).toHaveCount(0);
+  expect(await control("/rebuild")).toMatchObject({equal:true,tables:6});expect(errors).toEqual([]);
+ }finally{await Promise.allSettled(contexts.map(context=>context.close()));}
 });

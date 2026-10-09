@@ -8,15 +8,16 @@ import { operatorClient, OperatorError } from "../../lib/operator-client";
 import { normalizeId } from "../../lib/urls";
 import type { OperatorUser,OperatorProduct,OperatorHistory,OperatorBusinesses,OperatorOperations } from "../../lib/operator-contract";
 
+import {ReceiptRequests} from "./receipt-requests";
 import { ReceiveProduct, CreateProduct, CloseProduct, ProductQR } from "./product-actions";
 import { StockSummary, Holders } from "../product-stock";
 import { ReferenceLookup, formatCount } from "../reference-lookup";
 import { ProductMetadata, SupplyChainStatus } from "../product-information";
 
-type Section="overview"|"products"|"businesses"|"activity"|"product"|"receive"|"create";
+type Section="overview"|"products"|"businesses"|"activity"|"product"|"receive"|"create"|"requests";
 type Data={user:OperatorUser;products:OperatorProduct[];next:string|null;businesses:OperatorBusinesses;operations:OperatorOperations;history:OperatorHistory|null};
 const friendly=(value:string|null,fallback:string)=>value?readableLabel(value):fallback;
-const operationNames:Record<string,string>={createProduct:"Product added",claimBatch:"Batch received",removeProduct:"Items removed",createEntity:"Product added",recordTrace:"Update recorded",updateEntityState:"Status changed",updateEntityMetadata:"Product information updated",createEntityLink:"Related product added",setEntityLinkActive:"Product connection updated",claimCustody:"Product received",closeEntity:"Out of supply chain"};
+const operationNames:Record<string,string>={createProduct:"Product added",approveReceipt:"Receipt approved",claimBatch:"Batch received",removeProduct:"Items removed",createEntity:"Product added",recordTrace:"Update recorded",updateEntityState:"Status changed",updateEntityMetadata:"Product information updated",createEntityLink:"Related product added",setEntityLinkActive:"Product connection updated",claimCustody:"Product received",closeEntity:"Out of supply chain"};
 const eventNames:Record<string,string>={ProductRegistered:"Product added",BatchReceived:"Items received",QuantityRemoved:"Items removed",EntityCreated:"Product added",CustodyClaimed:"Product received",EntityClosed:"Out of supply chain",EntityMetadataUpdated:"Product details updated",TraceRecorded:"Product update"};
 const operationStatuses:Record<string,string>={PREPARED:"Prepared",BROADCAST:"Awaiting confirmation",CONFIRMED:"Confirmed",FAILED:"Failed"};
 export function OperatorDashboard({section="overview",productId,initialTracking}:{section?:Section;productId?:string;initialTracking?:string}){
@@ -64,11 +65,11 @@ export function OperatorDashboard({section="overview",productId,initialTracking}
   (filter!=="open"||!product.closed)&&(filter!=="closed"||product.closed)&&
   (!search||[productDisplayName(product.name),product.closed?"Out of supply chain":"In supply chain",product.holder?.name,product.quantity?.externalId,product.id].some(value=>value?.toLowerCase().includes(search.toLowerCase()))));
  const businessName=(id:string|null)=>id?data.businesses.businesses.find(business=>business.id===id)?.name??"Business name unavailable":"Business not recorded";
- const title=section==="product"?productDisplayName(data.history?.product.name??null)??"Product details":section==="create"?"Add a product":section==="receive"?"Receive a product":section==="products"?"Products":section==="businesses"?"Businesses":section==="activity"?"Activity":"Business dashboard";
+ const title=section==="product"?productDisplayName(data.history?.product.name??null)??"Product details":section==="create"?"Add a product":section==="receive"?"Receive a product":section==="requests"?"Receipt requests":section==="products"?"Products":section==="businesses"?"Businesses":section==="activity"?"Activity":"Business dashboard";
  return <div className="operator-frame" data-operator-record>
   <aside className="operator-sidebar" aria-label="Business sidebar" data-menu-open={menuOpen}><div className="operator-sidebar-heading"><div><span className="eyebrow">Your business</span><h2>{data.user.organizationName??data.user.workspaceName??"Business workspace"}</h2>{data.user.workspaceName&&data.user.workspaceName!==data.user.organizationName&&<p>{data.user.workspaceName}</p>}</div><button className="btn btn-outline-secondary operator-menu-toggle" aria-expanded={menuOpen} aria-controls="business-menu" onClick={()=>setMenuOpen(value=>!value)}>{menuOpen?"Hide menu":"Show menu"}</button></div>
    <div className="operator-sidebar-body" id="business-menu">
-   <nav aria-label="Business dashboard"><Link href="/operator" aria-current={section==="overview"?"page":undefined} prefetch={false}>Overview</Link><Link href="/operator/products" aria-current={section==="products"||section==="product"||section==="create"?"page":undefined} prefetch={false}>Products</Link><Link href="/operator/receive" aria-current={section==="receive"?"page":undefined} prefetch={false}>Receive a product</Link><Link href="/operator/businesses" aria-current={section==="businesses"?"page":undefined} prefetch={false}>Businesses</Link><Link href="/operator/activity" aria-current={section==="activity"?"page":undefined} prefetch={false}>Activity</Link></nav>
+   <nav aria-label="Business dashboard"><Link href="/operator" aria-current={section==="overview"?"page":undefined} prefetch={false}>Overview</Link><Link href="/operator/products" aria-current={section==="products"||section==="product"||section==="create"?"page":undefined} prefetch={false}>Products</Link><Link href="/operator/receive" aria-current={section==="receive"?"page":undefined} prefetch={false}>Receive a product</Link><Link href="/operator/requests" aria-current={section==="requests"?"page":undefined} prefetch={false}>Receipt requests</Link><Link href="/operator/businesses" aria-current={section==="businesses"?"page":undefined} prefetch={false}>Businesses</Link><Link href="/operator/activity" aria-current={section==="activity"?"page":undefined} prefetch={false}>Activity</Link></nav>
    <div className="operator-account">{data.user.businessCode&&<p>Business code: <strong>{data.user.businessCode}</strong></p>}<strong>{data.user.name}</strong><p>{data.user.email}</p><button className="btn btn-outline-secondary" onClick={logout} disabled={signingOut}>Sign out</button></div>
    </div>
   </aside>
@@ -76,6 +77,7 @@ export function OperatorDashboard({section="overview",productId,initialTracking}
    <div className="operator-notice">Receive products after physical handover. Only the current holder can remove a product from the supply chain.</div>{errorView}
    {section==="receive"&&<ReceiveProduct initial={initialTracking} organizationId={data.user.organizationId}/>}
    {section==="products"&&<section className="panel operator-panel"><h2>Find a registered product</h2><p>Search the ID printed on the product, including records beyond your loaded list. Choose a match to inspect its available sources on the Receive page.</p><ReferenceLookup operator onSelect={id=>router.push("/operator/receive?"+new URLSearchParams({tracking:id}))}/></section>}
+   {section==="requests"&&<ReceiptRequests/>}
    {section==="create"&&<CreateProduct businessCode={data.user.businessCode}/>}
    {section==="overview"&&<div className="operator-stats"><div className="panel"><span>Products loaded</span><strong>{data.products.length}{data.next?"+":""}</strong></div><div className="panel"><span>Currently with your business</span><strong>{data.products.filter(product=>(product.quantity?BigInt(product.quantity.ownAvailableQuantity??"0")>0n:!product.closed&&product.holder?.id===data.user.organizationId)).length}</strong></div><div className="panel"><span>Businesses shown</span><strong>{data.businesses.businesses.length}</strong></div></div>}
    {(section==="overview"||section==="products")&&<section className="panel operator-panel" aria-label="Workspace products"><div className="operator-section-title"><h2>{section==="overview"?"Products your business has handled":"Product list"}</h2><span>{filtered.length} shown</span></div>

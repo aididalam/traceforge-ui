@@ -54,13 +54,13 @@ test("receipt requires physical confirmation and uses a fixed authenticated writ
  await signIn(page);await navigateBusiness(page,"Receive a product");
  await page.getByLabel("Tracking ID or product / batch ID",{exact:true}).fill(operatorProduct.id);
  await page.getByRole("button",{name:"Find product",exact:true}).click();
- const receive=page.getByRole("button",{name:"Receive into my inventory",exact:true});
+ const receive=page.getByRole("button",{name:"Request to receive",exact:true});
  await expect(receive).toBeDisabled();
  await page.getByLabel("I have physically received this product",{exact:true}).check();
  const sent=page.waitForRequest(request=>request.url().endsWith("/receive")&&request.method()==="POST");
  await receive.click();const request=await sent;
  expect(request.postDataJSON()).toMatchObject({version:"1",confirmed:true});expect(request.headers().authorization).toBeUndefined();
- await expect(page.getByText("Confirmed. Product history will update shortly.",{exact:true})).toBeVisible();
+ await expect(page.getByRole("status").filter({hasText:"Awaiting the current owner"})).toBeVisible();
  await expect(receive).toHaveCount(0);
 });
 test("a produced product has a decodable Tracking ID QR, and the holder can close it with a reason",async({page})=>{
