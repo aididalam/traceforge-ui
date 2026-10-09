@@ -10,6 +10,7 @@ export function OperatorSignIn(){
  const router=useRouter();
  const [signup,setSignup]=useState(false),[businessName,setBusinessName]=useState(""),[businessType,setBusinessType]=useState(""),[publicProfile,setPublicProfile]=useState(false);
  const [businessCode,setBusinessCode]=useState("");
+ const [funding,setFunding]=useState<{walletAddress:string;symbol:string}|null>(null);
  const [email,setEmail]=useState(""),[password,setPassword]=useState(""),[name,setName]=useState("");
  const [busy,setBusy]=useState(false),[error,setError]=useState(""),[success,setSuccess]=useState(""),[retryAt,setRetryAt]=useState(0),[now,setNow]=useState(Date.now());
  useEffect(()=>{if(retryAt<=Date.now())return;const timer=setInterval(()=>setNow(Date.now()),250);return()=>clearInterval(timer);},[retryAt]);
@@ -18,14 +19,14 @@ export function OperatorSignIn(){
   event.preventDefault();if(busy||wait)return;
   if(signup&&(!businessType.trim()||/[\x00-\x1f\x7f]/.test(businessType))){setError("Enter a business type, such as a repair workshop or customs broker.");return;}
   if(signup&&businessCode.trim()&&!businessCodeSchema.safeParse(businessCode).success){setError("Business code must use 1–16 letters or numbers.");return;}
-  setBusy(true);setError("");setSuccess("");
+  setBusy(true);setError("");setSuccess("");setFunding(null);
   try{
    const response=await fetch(`/operator/api/${signup?"signup":"login"}`,{method:"POST",credentials:"same-origin",cache:"no-store",redirect:"error",
     headers:{"Content-Type":"application/json"},body:JSON.stringify({email:email.trim().toLowerCase(),password,...(signup?{name:name.trim(),businessName:businessName.trim(),businessType:businessType.trim(),publicProfile,...(businessCode.trim()?{businessCode:businessCodeSchema.parse(businessCode)}:{})}: {})}),signal:AbortSignal.timeout(signup?55000:10000)});
    setPassword("");
    if(response.status===429){setRetryAt(Date.now()+Number(response.headers.get("retry-after")??60)*1000);setError("Please wait before trying again.");return;}
    if(!response.ok){setError(response.status===401?"Email or password is incorrect, or access is unavailable.":response.status===409?"That business code or account is unavailable. Choose another code and try again.":response.status===400?"Check your details and try again.":"Sign in is temporarily unavailable. Try again shortly.");return;}
-   if(signup){const result=await response.json();if(result.pending){setSuccess("Registration is awaiting confirmation. Submit the same details again to finish.");return;}setSignup(false);setSuccess("Your business account is ready. Sign in with your email and password."+(result.businessCode?` Your business code is ${result.businessCode}.`:""));}
+   if(signup){const result=await response.json();setFunding(result.funding??null);if(result.pending){setSuccess(result.funding?"Your business wallet needs funds to pay this network's transaction fees. Ask your platform operator to fund the address below, then submit the same registration details again.":"Registration is awaiting network confirmation. Submit the same details again to finish.");return;}setSignup(false);setSuccess("Your business account is ready. Sign in with your email and password."+(result.businessCode?` Your business code is ${result.businessCode}.`:""));}
    else{router.replace("/operator");router.refresh();}
   }catch{setPassword("");setError("Sign in is temporarily unavailable. Try again shortly.");}finally{setBusy(false);}
  };
@@ -43,9 +44,10 @@ export function OperatorSignIn(){
    </div>
    </fieldset>
    {error&&<p className="form-error" role="alert">{error}</p>}{success&&<p role="status">{success}</p>}
+   {funding&&<div className="alert alert-info"><p>Business wallet · {funding.symbol}</p><code className="text-break">{funding.walletAddress}</code></div>}
    <button className="btn btn-primary" type="submit" disabled={busy||wait>0}>{busy?"Please wait…":wait>0?`Try again in ${wait}s`:signup?"Register business":"Sign in"}</button>
   </form>
-  <div className="operator-auth-links"><button className="btn btn-link" type="button" disabled={busy} onClick={()=>{setSignup(!signup);setError("");setSuccess("");setPassword("");}}>{signup?"I already have an account":"Register a business"}</button>
+  <div className="operator-auth-links"><button className="btn btn-link" type="button" disabled={busy} onClick={()=>{setSignup(!signup);setError("");setSuccess("");setPassword("");setFunding(null);}}>{signup?"I already have an account":"Register a business"}</button>
   <Link href="/" prefetch={false}>Track a product</Link></div>
   <p className="small-note">Each business registers independently. No invitation is needed.</p>
  </section>;

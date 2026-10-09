@@ -86,7 +86,8 @@ export async function operatorGateway(request:Request,action:OperatorAction,prod
     if(response.status===400||response.status===404)return fail(response.status,response.status===404?"missing":"invalid_request");
     if(!response.ok||!response.headers.get("content-type")?.includes("application/json"))throw Error();
     const body=await response.json();
-    if(action==="signup")return json(z.strictObject({created:z.boolean(),pending:z.boolean(),businessCode:businessCode.optional()}).parse(body));
+    if(action==="signup")return json(z.strictObject({created:z.boolean(),pending:z.boolean(),businessCode:businessCode.optional(),
+      funding:z.strictObject({walletAddress:z.string().regex(/^0x[0-9a-fA-F]{40}$/),symbol:z.string().regex(/^[A-Za-z0-9]{1,12}$/)}).optional()}).parse(body));
     if(["create","receive","close","remove"].includes(action)){
       const result=(action==="create"?createWriteResultSchema:action==="receive"?receiveWriteResultSchema:removeWriteResultSchema).parse(body);
       if(action!=="create"&&result.trackingId!==id)throw Error();

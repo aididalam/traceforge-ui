@@ -3,6 +3,7 @@
 node_modules
 .next*
 test-results
+integration-results
 playwright-report
 *.log
 Dockerfile
